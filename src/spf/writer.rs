@@ -1,4 +1,4 @@
-use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, SPF_VERSION, DESC_SIZE};
+use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, DESC_SIZE};
 use crate::spf::types::encoding_from_name;
 use anyhow::{bail, Context, Result};
 use std::fs::File;
@@ -17,24 +17,16 @@ pub struct SpfWriter {
 }
 
 impl SpfWriter {
-    /// 创建新的 SPF 写入器（默认版本号为 SPF_VERSION，编码为 UTF-8）
-    pub fn new(file_id: u8) -> Self {
-        Self {
-            file_id,
-            version: SPF_VERSION,
-            desc: [0u8; DESC_SIZE],
-            encoding: encoding_rs::UTF_8,
-            files: Vec::new(),
-        }
-    }
-
-    /// 创建新的 SPF 写入器并指定版本号
-    pub fn with_version(file_id: u8, version: SpfVersion) -> Self {
+    /// 创建新的 SPF 写入器
+    /// - file_id: SPF 文件 ID (0-255)
+    /// - version: 版本号
+    /// - encoding: 文件名编码（如 "GBK"、"EUC-KR"、"UTF-8"）
+    pub fn new(file_id: u8, version: SpfVersion, encoding: &str) -> Self {
         Self {
             file_id,
             version,
             desc: [0u8; DESC_SIZE],
-            encoding: encoding_rs::UTF_8,
+            encoding: encoding_from_name(encoding),
             files: Vec::new(),
         }
     }
@@ -44,11 +36,6 @@ impl SpfWriter {
         let bytes = desc.as_bytes();
         let len = bytes.len().min(DESC_SIZE - 1);
         self.desc[..len].copy_from_slice(&bytes[..len]);
-    }
-
-    /// 设置文件名编码
-    pub fn set_encoding(&mut self, encoding: &str) {
-        self.encoding = encoding_from_name(encoding);
     }
 
     /// 添加文件（文件名保持 UTF-8，按插入顺序存储）
@@ -68,16 +55,10 @@ impl SpfWriter {
 
     /// 从目录扫描并添加所有文件（不递归子目录）
     /// prefix 是 SPF 内部路径前缀（如 "DATA/ANITABLE"）
-    /// encoding 是文件名编码（如 "GBK"），用于设置写入时的编码
-    pub fn add_from_dir(&mut self, data_dir: &Path, prefix: &str, encoding: Option<&str>, verbose: bool) -> Result<()> {
+    pub fn add_from_dir(&mut self, data_dir: &Path, prefix: &str, verbose: bool) -> Result<()> {
         let prefix_path = data_dir.join(prefix);
         if !prefix_path.exists() {
             bail!("Directory not found: {}", prefix_path.display());
-        }
-
-        // 设置编码
-        if let Some(enc) = encoding {
-            self.encoding = encoding_from_name(enc);
         }
 
         // 收集当前目录下的所有文件
@@ -138,6 +119,9 @@ impl SpfWriter {
             // 构建文件名数组
             let mut file_name = [0u8; 128];
             let len = name_encoded.len().min(127);
+            if name_encoded.len() > 127 {
+                eprintln!("[警告] 文件名 '{}' 超过 127 字节，已被截断", name);
+            }
             file_name[..len].copy_from_slice(&name_encoded[..len]);
 
             // 构建 FINFO

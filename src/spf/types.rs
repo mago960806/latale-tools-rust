@@ -63,9 +63,9 @@ impl FInfo {
     }
 
     /// 获取文件名字符串，使用指定编码或默认 GBK
-    pub fn file_name_str_with_encoding(&self, encoding: Option<&str>) -> String {
+    pub fn file_name_str_with_encoding(&self, encoding: Option<&'static encoding_rs::Encoding>) -> String {
         let bytes = self.file_name_bytes();
-        let enc = encoding.map(encoding_from_name).unwrap_or(encoding_rs::GBK);
+        let enc = encoding.unwrap_or(encoding_rs::GBK);
         let (s, _, _) = enc.decode(bytes);
         s.into_owned()
     }
@@ -101,13 +101,9 @@ impl SpfHeader {
     /// 获取描述字符串
     pub fn desc_str(&self) -> &str {
         let end = self.desc.iter().position(|&b| b == 0).unwrap_or(128);
-        unsafe { std::str::from_utf8_unchecked(&self.desc[..end]) }
+        std::str::from_utf8(&self.desc[..end]).unwrap_or("")
     }
 }
 
-/// SPF 文件常量
-pub const SPF_VERSION: SpfVersion = 0;
-/// 最大文件名长度
-pub const MAX_FILE_NAME: usize = 128;
 /// 描述信息长度
 pub const DESC_SIZE: usize = 128;

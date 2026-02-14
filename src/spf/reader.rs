@@ -1,4 +1,5 @@
-use crate::spf::{FInfo, SpfHeader, SpfVersion};
+use crate::spf::{FInfo, SpfHeader, SpfVersion, SpfRegistry};
+use crate::spf::types::encoding_from_name;
 use anyhow::{bail, Context, Result};
 use memmap2::Mmap;
 use std::fs::File;
@@ -9,10 +10,13 @@ pub struct SpfReader {
     mmap: Mmap,
     header: SpfHeader,
     version: SpfVersion,
+    /// 文件名编码
+    encoding: Option<&'static encoding_rs::Encoding>,
 }
 
 impl SpfReader {
     /// 打开 SPF 文件并映射到内存
+    /// 编码自动从 SpfRegistry 获取（根据 file_id）
     pub fn open(path: &Path) -> Result<Self> {
         let file = File::open(path)
             .with_context(|| format!("Failed to open SPF file: {}", path.display()))?;
@@ -35,9 +39,11 @@ impl SpfReader {
         let header_end = header_offset + std::mem::size_of::<SpfHeader>();
         let header: SpfHeader = bytemuck::pod_read_unaligned(&mmap[header_offset..header_end]);
 
-        // 版本号不校验，可能是日期格式（如 2022091501）
+        // 从 registry 获取编码
+        let encoding = SpfRegistry::find_by_file_id(header.file_id as u8)
+            .map(|r| encoding_from_name(r.encoding));
 
-        Ok(Self { mmap, header, version })
+        Ok(Self { mmap, header, version, encoding })
     }
 
     /// 获取 SPF 版本号
@@ -48,6 +54,11 @@ impl SpfReader {
     /// 获取 SPF 文件头
     pub fn header(&self) -> &SpfHeader {
         &self.header
+    }
+
+    /// 获取文件名编码
+    pub fn encoding(&self) -> Option<&'static encoding_rs::Encoding> {
+        self.encoding
     }
 
     /// 获取文件数量
@@ -139,25 +150,15 @@ impl SpfReader {
     }
 
     /// 解包所有文件到指定目录
-    pub fn unpack(&self, output_dir: &Path, verbose: bool) -> Result<()> {
-        self.unpack_with_encoding(output_dir, None, verbose)
-    }
-
-    /// 解包所有文件到指定目录，支持指定编码
-    pub fn unpack_with_encoding(&self, output_dir: &Path, encoding: Option<&str>, verbose: bool) -> Result<()> {
+    pub fn unpack(&self, output_dir: &Path) -> Result<()> {
         use std::fs;
         use std::io::Write;
 
         let finfos = self.file_infos();
-        let total = finfos.len();
 
-        for (i, finfo) in finfos.iter().enumerate() {
-            let file_name = finfo.file_name_str_with_encoding(encoding);
+        for finfo in finfos.iter() {
+            let file_name = finfo.file_name_str_with_encoding(self.encoding);
             let output_path = output_dir.join(&file_name);
-
-            if verbose {
-                println!("  [{}/{}] {}", i + 1, total, file_name);
-            }
 
             // 创建父目录
             if let Some(parent) = output_path.parent() {

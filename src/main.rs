@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use latale_tools::spf::{SpfReader, SpfRegistry, SpfWriter};
 use std::path::PathBuf;
@@ -19,6 +19,21 @@ fn format_size(size: usize) -> String {
 // 打印分隔线
 fn print_separator() {
     println!("{}", "-".repeat(60));
+}
+
+/// 打印分节标题（支持带额外信息）
+fn print_section_header<T: std::fmt::Display>(title: &str, extra: T) {
+    println!();
+    print!("[{}]", title);
+    println!(" {}", extra);
+    print_separator();
+}
+
+/// 打印完整标题的分节（标题行已包含方括号）
+fn print_full_section(line: &str) {
+    println!();
+    println!("{}", line);
+    print_separator();
 }
 
 #[derive(Parser)]
@@ -54,9 +69,6 @@ enum Commands {
         /// 输出目录（默认为当前目录）
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// 文件名编码（默认从注册表获取）
-        #[arg(long)]
-        encoding: Option<String>,
         /// 仅模拟运行，不实际写入文件
         #[arg(long)]
         dry_run: bool,
@@ -94,8 +106,8 @@ fn main() -> Result<()> {
         Commands::Verify { spf_file } => {
             cmd_verify(&spf_file)?;
         }
-        Commands::Unpack { spf_file, output, encoding, dry_run } => {
-            cmd_unpack(&spf_file, output.as_deref(), encoding.as_deref(), dry_run)?;
+        Commands::Unpack { spf_file, output, dry_run } => {
+            cmd_unpack(&spf_file, output.as_deref(), dry_run)?;
         }
         Commands::Pack { spf_name, output, data_dir, version, encoding, dry_run } => {
             cmd_pack(&spf_name, output.as_deref(), data_dir.as_deref(), version, encoding.as_deref(), dry_run)?;
@@ -111,11 +123,8 @@ fn cmd_info(spf_file: &std::path::Path, list: bool) -> Result<()> {
 
     let header = reader.header();
     let registry = SpfRegistry::find_by_file_id(header.file_id as u8);
-    let encoding = registry.map(|r| r.encoding);
 
-    println!();
-    println!("[文件信息] {}", spf_file.display());
-    print_separator();
+    print_section_header("文件信息", spf_file.display());
 
     println!("版本号:      {}", reader.version());
     println!("文件编号:    {} (0x{:02X})", header.file_id, header.file_id);
@@ -137,14 +146,12 @@ fn cmd_info(spf_file: &std::path::Path, list: bool) -> Result<()> {
 
     if list {
         let finfos = reader.file_infos();
-        println!();
-        println!("[文件列表] 共 {} 个:", finfos.len());
-        print_separator();
+        print_full_section(&format!("[文件列表] 共 {} 个:", finfos.len()));
 
         for (i, finfo) in finfos.iter().enumerate() {
             println!("  [{:5}] {:<48} {:>8}  RESID=0x{:08X} (file_id={}, instance_id={})",
                 i + 1,
-                finfo.file_name_str_with_encoding(encoding),
+                finfo.file_name_str_with_encoding(reader.encoding()),
                 format_size(finfo.size as usize),
                 finfo.res_id.0,
                 finfo.res_id.file_id(),
@@ -159,9 +166,7 @@ fn cmd_info(spf_file: &std::path::Path, list: bool) -> Result<()> {
 }
 
 fn cmd_verify(spf_file: &std::path::Path) -> Result<()> {
-    println!();
-    println!("[验证文件] {}", spf_file.display());
-    print_separator();
+    print_section_header("验证文件", spf_file.display());
 
     let reader = SpfReader::open(spf_file)
         .with_context(|| format!("无法打开 SPF 文件: {}", spf_file.display()))?;
@@ -182,17 +187,14 @@ fn cmd_verify(spf_file: &std::path::Path) -> Result<()> {
             if issues.is_empty() {
                 println!("[通过] 文件完整无损");
             } else {
-                println!("[警告] 发现 {} 个问题:", issues.len());
                 for issue in &issues {
                     eprintln!("  - {}", issue);
                 }
-                println!("[失败] 验证未通过");
-                std::process::exit(1);
+                bail!("验证发现 {} 个问题", issues.len());
             }
         }
         Err(e) => {
-            eprintln!("[错误] 验证出错: {}", e);
-            std::process::exit(1);
+            bail!("验证出错: {}", e);
         }
     }
 
@@ -204,43 +206,33 @@ fn cmd_verify(spf_file: &std::path::Path) -> Result<()> {
 fn cmd_unpack(
     spf_file: &std::path::Path,
     output: Option<&std::path::Path>,
-    encoding: Option<&str>,
     dry_run: bool,
 ) -> Result<()> {
     let output_dir = output.unwrap_or_else(|| std::path::Path::new("."));
 
-    println!();
-    println!("[解包] {}", spf_file.display());
-    print_separator();
+    print_section_header("解包", spf_file.display());
 
     let reader = SpfReader::open(spf_file)
         .with_context(|| format!("无法打开 SPF 文件: {}", spf_file.display()))?;
 
     let header = reader.header();
-
-    // 尝试从 registry 获取默认编码
     let registry = SpfRegistry::find_by_file_id(header.file_id as u8);
-    let encoding = encoding.or(registry.map(|r| r.encoding));
 
     println!("版本号:      {}", reader.version());
     println!("文件编号:    {}", header.file_id);
     if let Some(reg) = registry {
         println!("注册名称:    {}", reg.name);
-    }
-    if let Some(enc) = encoding {
-        println!("文件名编码:  {}", enc);
+        println!("文件名编码:  {}", reg.encoding);
     }
     println!("文件数量:    {}", reader.file_count());
     println!("输出目录:    {}", output_dir.display());
 
     if dry_run {
-        println!();
-        println!("[模拟运行] 将解包以下 {} 个文件:", reader.file_count());
-        print_separator();
+        print_full_section(&format!("[模拟运行] 将解包以下 {} 个文件:", reader.file_count()));
 
         let finfos = reader.file_infos();
         for finfo in finfos {
-            println!("  - {} ({})", finfo.file_name_str_with_encoding(encoding), format_size(finfo.size as usize));
+            println!("  - {} ({})", finfo.file_name_str_with_encoding(reader.encoding()), format_size(finfo.size as usize));
         }
         println!();
         println!("[提示] 模拟运行，未实际写入文件");
@@ -249,10 +241,9 @@ fn cmd_unpack(
         println!("[执行] 正在解包...");
         println!();
 
-        reader.unpack_with_encoding(output_dir, encoding, true)
+        reader.unpack(output_dir)
             .context("解包失败")?;
 
-        println!();
         println!("[完成] 共解包 {} 个文件", reader.file_count());
     }
 
@@ -280,19 +271,21 @@ fn cmd_pack(
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| std::path::Path::new(".").join(format!("{}.SPF", registry.name)));
 
-    println!();
-    println!("[打包] {}.SPF", registry.name);
-    print_separator();
+    print_section_header("打包", format!("{}.SPF", registry.name));
     println!("文件编号:    {} (0x{:02X})", registry.file_id, registry.file_id);
     println!("版本号:      {}", version.unwrap_or(registry.version));
     println!("文件名编码:  {}", encoding);
     println!("包含目录:    {}", registry.include_dirs.join(", "));
 
-    let mut writer = SpfWriter::with_version(registry.file_id, version.unwrap_or(registry.version));
+    let mut writer = SpfWriter::new(
+        registry.file_id,
+        version.unwrap_or(registry.version),
+        encoding,
+    );
 
     for dir in registry.include_dirs {
         println!("源目录:      {}/{}", data_dir.display(), dir);
-        writer.add_from_dir(data_dir, dir, Some(encoding), false)
+        writer.add_from_dir(data_dir, dir, false)
             .context(format!("读取源文件失败: {}/{}", data_dir.display(), dir))?;
     }
 
@@ -300,9 +293,7 @@ fn cmd_pack(
     println!("输出文件:    {}", output_path.display());
 
     if dry_run {
-        println!();
-        println!("[模拟运行] 将打包以下 {} 个文件:", writer.file_count());
-        print_separator();
+        print_full_section(&format!("[模拟运行] 将打包以下 {} 个文件:", writer.file_count()));
 
         for name in writer.file_names() {
             println!("  - {}", name);
