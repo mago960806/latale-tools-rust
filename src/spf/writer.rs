@@ -1,6 +1,6 @@
-use crate::spf::{FInfo, ResId, SpfHeader, SPF_VERSION, DESC_SIZE};
+use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, SPF_VERSION, DESC_SIZE};
+use crate::spf::types::encoding_from_name;
 use anyhow::{bail, Context, Result};
-use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -8,18 +8,34 @@ use std::path::Path;
 /// SPF 文件写入器
 pub struct SpfWriter {
     file_id: u8,
-    desc: [u8; 32],
-    /// 文件数据，使用 BTreeMap 保证按文件名排序
-    files: BTreeMap<String, Vec<u8>>,
+    version: SpfVersion,
+    desc: [u8; DESC_SIZE],
+    /// 文件名编码
+    encoding: &'static encoding_rs::Encoding,
+    /// 文件数据，使用 Vec 保持插入顺序
+    files: Vec<(String, Vec<u8>)>,
 }
 
 impl SpfWriter {
-    /// 创建新的 SPF 写入器
+    /// 创建新的 SPF 写入器（默认版本号为 SPF_VERSION，编码为 UTF-8）
     pub fn new(file_id: u8) -> Self {
         Self {
             file_id,
+            version: SPF_VERSION,
             desc: [0u8; DESC_SIZE],
-            files: BTreeMap::new(),
+            encoding: encoding_rs::UTF_8,
+            files: Vec::new(),
+        }
+    }
+
+    /// 创建新的 SPF 写入器并指定版本号
+    pub fn with_version(file_id: u8, version: SpfVersion) -> Self {
+        Self {
+            file_id,
+            version,
+            desc: [0u8; DESC_SIZE],
+            encoding: encoding_rs::UTF_8,
+            files: Vec::new(),
         }
     }
 
@@ -30,34 +46,71 @@ impl SpfWriter {
         self.desc[..len].copy_from_slice(&bytes[..len]);
     }
 
-    /// 添加文件
-    pub fn add_file(&mut self, name: String, data: Vec<u8>) {
-        self.files.insert(name, data);
+    /// 设置文件名编码
+    pub fn set_encoding(&mut self, encoding: &str) {
+        self.encoding = encoding_from_name(encoding);
     }
 
-    /// 从目录扫描并添加所有文件
-    /// prefix 是 SPF 内部路径前缀（如 "CHAR/HOSHIM"）
-    pub fn add_from_dir(&mut self, data_dir: &Path, prefix: &str) -> Result<()> {
-        use walkdir::WalkDir;
+    /// 添加文件（文件名保持 UTF-8，按插入顺序存储）
+    pub fn add_file(&mut self, name: String, data: Vec<u8>) {
+        self.files.push((name, data));
+    }
 
+    /// 获取文件数量
+    pub fn file_count(&self) -> usize {
+        self.files.len()
+    }
+
+    /// 获取所有文件名（按插入顺序）
+    pub fn file_names(&self) -> impl Iterator<Item = &String> {
+        self.files.iter().map(|(name, _)| name)
+    }
+
+    /// 从目录扫描并添加所有文件（不递归子目录）
+    /// prefix 是 SPF 内部路径前缀（如 "DATA/ANITABLE"）
+    /// encoding 是文件名编码（如 "GBK"），用于设置写入时的编码
+    pub fn add_from_dir(&mut self, data_dir: &Path, prefix: &str, encoding: Option<&str>, verbose: bool) -> Result<()> {
         let prefix_path = data_dir.join(prefix);
         if !prefix_path.exists() {
             bail!("Directory not found: {}", prefix_path.display());
         }
 
-        for entry in WalkDir::new(&prefix_path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let full_path = entry.path();
-            let relative = full_path.strip_prefix(data_dir)
-                .context("Failed to strip prefix")?;
+        // 设置编码
+        if let Some(enc) = encoding {
+            self.encoding = encoding_from_name(enc);
+        }
 
-            let name = relative.to_string_lossy().replace('\\', "/");
-            let data = std::fs::read(full_path)
-                .with_context(|| format!("Failed to read: {}", full_path.display()))?;
+        // 收集当前目录下的所有文件
+        let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+        let entries = std::fs::read_dir(&prefix_path)
+            .with_context(|| format!("Failed to read directory: {}", prefix_path.display()))?;
 
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_file() {
+                let relative = path.strip_prefix(data_dir)
+                    .context("Failed to strip prefix")?;
+
+                let name = relative.to_string_lossy().replace('\\', "/");
+                let data = std::fs::read(&path)
+                    .with_context(|| format!("Failed to read: {}", path.display()))?;
+
+                files.push((name, data));
+            }
+        }
+
+        // 按文件名排序
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+
+        if verbose {
+            for (name, _) in &files {
+                println!("  {}", name);
+            }
+            println!("  Total: {} files", files.len());
+        }
+
+        // 添加到 writer
+        for (name, data) in files {
             self.add_file(name, data);
         }
 
@@ -79,18 +132,21 @@ impl SpfWriter {
         let mut current_offset: i32 = 0;
 
         for (name, data) in &self.files {
+            // 将 UTF-8 文件名编码为目标编码
+            let (name_encoded, _, _) = self.encoding.encode(name);
+
             // 构建文件名数组
             let mut file_name = [0u8; 128];
-            let name_bytes = name.as_bytes();
-            let len = name_bytes.len().min(127);
-            file_name[..len].copy_from_slice(&name_bytes[..len]);
+            let len = name_encoded.len().min(127);
+            file_name[..len].copy_from_slice(&name_encoded[..len]);
 
             // 构建 FINFO
+            // INSTANCE_ID 从 1 开始，与原始 SPF 格式一致
             let finfo = FInfo {
                 file_name,
                 offset: current_offset,
                 size: data.len() as i32,
-                res_id: ResId::new(self.file_id, finfos.len() as u32),
+                res_id: ResId::new(self.file_id, (finfos.len() + 1) as u32),
             };
             finfos.push(finfo);
 
@@ -115,14 +171,14 @@ impl SpfWriter {
         };
         let header_bytes: &[u8] = bytemuck::bytes_of(&header);
         writer.write_all(header_bytes)
-            .context("Failed to write SPF header")?;
+            .context("Failed to write header")?;
 
         // 4. 写入版本号
-        let version_bytes: &[u8] = bytemuck::bytes_of(&SPF_VERSION);
-        writer.write_all(version_bytes)
+        writer.write_all(&self.version.to_le_bytes())
             .context("Failed to write version")?;
 
-        writer.flush().context("Failed to flush")?;
+        writer.flush()
+            .context("Failed to flush")?;
 
         Ok(())
     }

@@ -51,15 +51,39 @@ pub struct FInfo {
 const _: () = assert!(std::mem::size_of::<FInfo>() == 140);
 
 impl FInfo {
-    /// 获取文件名字符串（去除尾部的 null 字符）
-    pub fn file_name_str(&self) -> &str {
+    /// 获取文件名原始字节（去除尾部的 null 字符）
+    pub fn file_name_bytes(&self) -> &[u8] {
         let end = self.file_name.iter().position(|&b| b == 0).unwrap_or(128);
-        // SAFETY: SPF 文件名应该是有效的 ASCII
-        unsafe { std::str::from_utf8_unchecked(&self.file_name[..end]) }
+        &self.file_name[..end]
+    }
+
+    /// 获取文件名字符串，默认使用 GBK 解码
+    pub fn file_name_str(&self) -> String {
+        self.file_name_str_with_encoding(None)
+    }
+
+    /// 获取文件名字符串，使用指定编码或默认 GBK
+    pub fn file_name_str_with_encoding(&self, encoding: Option<&str>) -> String {
+        let bytes = self.file_name_bytes();
+        let enc = encoding.map(encoding_from_name).unwrap_or(encoding_rs::GBK);
+        let (s, _, _) = enc.decode(bytes);
+        s.into_owned()
     }
 }
 
-/// SPF 文件头（40 字节）
+/// 根据编码名称获取编码
+pub fn encoding_from_name(name: &str) -> &'static encoding_rs::Encoding {
+    match name.to_uppercase().as_str() {
+        "UTF-8" | "UTF8" => encoding_rs::UTF_8,
+        "BIG5" | "BIG-5" => encoding_rs::BIG5,
+        "EUC-KR" | "EUCKR" | "KOREAN" => encoding_rs::EUC_KR,
+        "GBK" | "GB2312" | "GB18030" => encoding_rs::GBK,
+        "SHIFT_JIS" | "SHIFTJIS" | "SJIS" | "CP932" | "JAPANESE" => encoding_rs::SHIFT_JIS,
+        _ => encoding_rs::UTF_8,
+    }
+}
+
+/// SPF 文件头（136 字节）
 #[derive(Clone, Copy, Zeroable, Pod)]
 #[repr(C)]
 pub struct SpfHeader {
@@ -68,15 +92,15 @@ pub struct SpfHeader {
     /// SPF 文件 ID
     pub file_id: i32,
     /// 描述信息
-    pub desc: [u8; 32],
+    pub desc: [u8; 128],
 }
 
-const _: () = assert!(std::mem::size_of::<SpfHeader>() == 40);
+const _: () = assert!(std::mem::size_of::<SpfHeader>() == 136);
 
 impl SpfHeader {
     /// 获取描述字符串
     pub fn desc_str(&self) -> &str {
-        let end = self.desc.iter().position(|&b| b == 0).unwrap_or(32);
+        let end = self.desc.iter().position(|&b| b == 0).unwrap_or(128);
         unsafe { std::str::from_utf8_unchecked(&self.desc[..end]) }
     }
 }
@@ -86,4 +110,4 @@ pub const SPF_VERSION: SpfVersion = 0;
 /// 最大文件名长度
 pub const MAX_FILE_NAME: usize = 128;
 /// 描述信息长度
-pub const DESC_SIZE: usize = 32;
+pub const DESC_SIZE: usize = 128;
