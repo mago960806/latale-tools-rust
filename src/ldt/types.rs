@@ -1,0 +1,1 @@
+// LDT type definitions - placeholder
