@@ -250,4 +250,11 @@ $RECYCLE.BIN/
 # SPF Files
 *.SPF
 
+# temp files
+resources
+output
+
+# unpack dir
+DATA
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,rust,windows,python

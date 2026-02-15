@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use latale_tools::spf::{SpfReader, SpfRegistry, SpfWriter};
 use std::path::PathBuf;
+use std::time::Instant;
 
 // 格式化字节数为人类可读格式
 fn format_size(size: usize) -> String {
@@ -13,6 +14,15 @@ fn format_size(size: usize) -> String {
         format!("{:.2} KB", size as f64 / 1024.0)
     } else {
         format!("{} B", size)
+    }
+}
+
+// 格式化耗时：小于1秒显示毫秒，大于等于1秒显示秒
+fn format_duration(millis: u128) -> String {
+    if millis < 1000 {
+        format!("{:.2} ms", millis as f64)
+    } else {
+        format!("{:.2} s", millis as f64 / 1000.0)
     }
 }
 
@@ -241,10 +251,19 @@ fn cmd_unpack(
         println!("[执行] 正在解包...");
         println!();
 
-        reader.unpack(output_dir)
-            .context("解包失败")?;
+        let total = reader.file_count();
+        let callback = |current: usize, total: usize, name: &str| {
+            let width = total.to_string().len();
+            println!("  [{:>width$}/{}] {}", current, total, name);
+        };
 
-        println!("[完成] 共解包 {} 个文件", reader.file_count());
+        let start = Instant::now();
+        reader.unpack(output_dir, Some(&callback))
+            .context("解包失败")?;
+        let elapsed = start.elapsed().as_millis();
+
+        println!();
+        println!("[完成] 共解包 {} 个文件，耗时 {}", total, format_duration(elapsed));
     }
 
     println!();
@@ -285,7 +304,7 @@ fn cmd_pack(
 
     for dir in registry.include_dirs {
         println!("源目录:      {}/{}", data_dir.display(), dir);
-        writer.add_from_dir(data_dir, dir, false)
+        writer.add_from_dir(data_dir, dir)
             .context(format!("读取源文件失败: {}/{}", data_dir.display(), dir))?;
     }
 
@@ -313,11 +332,19 @@ fn cmd_pack(
             }
         }
 
-        writer.write(&output_path)
+        let total = writer.file_count();
+        let callback = |current: usize, total: usize, name: &str| {
+            let width = total.to_string().len();
+            println!("  [{:>width$}/{}] {}", current, total, name);
+        };
+
+        let start = Instant::now();
+        writer.write(&output_path, Some(&callback))
             .context("写入 SPF 文件失败")?;
+        let elapsed = start.elapsed().as_millis();
 
         println!();
-        println!("[完成] {}", output_path.display());
+        println!("[完成] 共打包 {} 个文件 -> {}，耗时 {}", total, output_path.display(), format_duration(elapsed));
     }
 
     println!();

@@ -150,13 +150,15 @@ impl SpfReader {
     }
 
     /// 解包所有文件到指定目录
-    pub fn unpack(&self, output_dir: &Path) -> Result<()> {
+    /// callback: 可选回调函数 (current, total, filename)，用于显示进度
+    pub fn unpack(&self, output_dir: &Path, callback: Option<&dyn Fn(usize, usize, &str)>) -> Result<()> {
         use std::fs;
         use std::io::Write;
 
         let finfos = self.file_infos();
+        let total = finfos.len();
 
-        for finfo in finfos.iter() {
+        for (i, finfo) in finfos.iter().enumerate() {
             let file_name = finfo.file_name_str_with_encoding(self.encoding);
             let output_path = output_dir.join(&file_name);
 
@@ -172,6 +174,11 @@ impl SpfReader {
                 .with_context(|| format!("Failed to create file: {}", output_path.display()))?;
             file.write_all(data)
                 .with_context(|| format!("Failed to write file: {}", output_path.display()))?;
+
+            // 调用回调
+            if let Some(cb) = callback {
+                cb(i + 1, total, &file_name);
+            }
         }
 
         Ok(())

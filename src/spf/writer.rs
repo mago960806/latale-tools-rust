@@ -55,7 +55,7 @@ impl SpfWriter {
 
     /// 从目录扫描并添加所有文件（不递归子目录）
     /// prefix 是 SPF 内部路径前缀（如 "DATA/ANITABLE"）
-    pub fn add_from_dir(&mut self, data_dir: &Path, prefix: &str, verbose: bool) -> Result<()> {
+    pub fn add_from_dir(&mut self, data_dir: &Path, prefix: &str) -> Result<()> {
         let prefix_path = data_dir.join(prefix);
         if !prefix_path.exists() {
             bail!("Directory not found: {}", prefix_path.display());
@@ -83,13 +83,6 @@ impl SpfWriter {
         // 按文件名排序
         files.sort_by(|a, b| a.0.cmp(&b.0));
 
-        if verbose {
-            for (name, _) in &files {
-                println!("  {}", name);
-            }
-            println!("  Total: {} files", files.len());
-        }
-
         // 添加到 writer
         for (name, data) in files {
             self.add_file(name, data);
@@ -99,7 +92,8 @@ impl SpfWriter {
     }
 
     /// 写入 SPF 文件
-    pub fn write(&self, output_path: &Path) -> Result<()> {
+    /// callback: 可选回调函数 (current, total, filename)，用于显示进度
+    pub fn write(&self, output_path: &Path, callback: Option<&dyn Fn(usize, usize, &str)>) -> Result<()> {
         let file = File::create(output_path)
             .with_context(|| format!("Failed to create: {}", output_path.display()))?;
         let mut writer = BufWriter::new(file);
@@ -112,7 +106,7 @@ impl SpfWriter {
         let mut finfos: Vec<FInfo> = Vec::with_capacity(file_count);
         let mut current_offset: i32 = 0;
 
-        for (name, data) in &self.files {
+        for (i, (name, data)) in self.files.iter().enumerate() {
             // 将 UTF-8 文件名编码为目标编码
             let (name_encoded, _, _) = self.encoding.encode(name);
 
@@ -138,6 +132,11 @@ impl SpfWriter {
             writer.write_all(data)
                 .context("Failed to write file data")?;
             current_offset += data.len() as i32;
+
+            // 调用回调
+            if let Some(cb) = callback {
+                cb(i + 1, file_count, name);
+            }
         }
 
         // 2. 写入 FINFO 索引表
