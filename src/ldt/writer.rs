@@ -147,8 +147,7 @@ impl LdtWriter {
     /// Write a single row
     fn write_row<W: Write>(&self, writer: &mut W, row: &Row) -> Result<()> {
         // Write primary key (4 bytes)
-        let pk = row.primary_key as i32;
-        writer.write_all(&pk.to_le_bytes())?;
+        writer.write_all(&row.primary_key.to_le_bytes())?;
 
         // Write field values
         for value in &row.values {

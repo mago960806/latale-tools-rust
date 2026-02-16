@@ -110,7 +110,7 @@ impl LdtReader {
             pos = new_pos;
         }
 
-        Ok((Row { primary_key: primary_key as i64, values }, pos))
+        Ok((Row { primary_key, values }, pos))
     }
 
     /// Read a single field value starting at the given offset

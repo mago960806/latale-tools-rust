@@ -82,7 +82,7 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
         }
 
         // First column is the primary key
-        let primary_key: i64 = record
+        let primary_key: i32 = record
             .get(0)
             .context("Missing primary key column")?
             .parse()

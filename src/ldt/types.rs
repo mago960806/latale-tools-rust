@@ -35,7 +35,7 @@ pub const NULL_TERMINATOR: u8 = 0x00;
 // === CSV related constants ===
 
 /// CSV header for the ID column with type annotation
-pub const CSV_ID_COLUMN_HEADER: &str = "ID:int64";
+pub const CSV_ID_COLUMN_HEADER: &str = "ID:int32";
 
 /// Separator between field name and type in CSV headers
 pub const CSV_TYPE_SEPARATOR: char = ':';
@@ -321,8 +321,8 @@ const _: () = assert!(std::mem::size_of::<LdtHeader>() == HEADER_SIZE);
 /// A row in an LDT table
 #[derive(Debug, Clone, PartialEq)]
 pub struct Row {
-    /// Primary key (row ID)
-    pub primary_key: i64,
+    /// Primary key (row ID, stored as i32 in LDT file)
+    pub primary_key: i32,
     /// Field values
     pub values: Vec<FieldValue>,
 }
