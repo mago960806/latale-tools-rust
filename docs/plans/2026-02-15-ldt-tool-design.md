@@ -75,7 +75,7 @@ ItemID:int64,Name:string,Price:int32,Rate:float32,Enabled:bool,IconRef:fid
 
 ## LDT 二进制格式
 
-### 文件头（8708 字节）
+### 文件头（8716 字节）
 
 | 偏移量 | 大小 | 字段 | 说明 |
 |--------|------|------|------|
@@ -85,10 +85,16 @@ ItemID:int64,Name:string,Price:int32,Rate:float32,Enabled:bool,IconRef:fid
 | 0x0C | 8192 | `FieldNAM[128]` | 字段名称数组（每个 64 字节） |
 | 0x200C | 512 | `FieldTYP[128]` | 字段类型数组（每个 4 字节） |
 
+### 文件尾（64 字节）
+
+每个 LDT 文件末尾有一个固定的 64 字节 footer：
+- `END` (3 字节)
+- 空格填充 (61 字节，0x20)
+
 ### 数据行结构
 
 每行数据：
-1. 主键（8 字节，int64）
+1. 主键（4 字节，int32）
 2. 各字段数据（按字段定义顺序）
 
 ### 字段数据存储
@@ -99,7 +105,7 @@ ItemID:int64,Name:string,Price:int32,Rate:float32,Enabled:bool,IconRef:fid
 | `int64` | 8 字节 little-endian |
 | `float32` | 4 字节 IEEE 754 little-endian |
 | `bool` | 4 字节（0=false，非0=true） |
-| `string`/`alias`/`fid` | 4 字节长度 + 变长数据 |
+| `string`/`alias`/`fid` | 2 字节长度（u16）+ 变长数据（GBK 编码，无结束符） |
 
 ## 代码架构
 
