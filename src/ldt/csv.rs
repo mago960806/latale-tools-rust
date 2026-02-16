@@ -145,6 +145,7 @@ fn parse_csv_row(line: &str, field_defs: &[FieldDef]) -> Result<Row> {
 }
 
 /// Parse a CSV line respecting quoted strings
+/// Note: Does NOT trim whitespace - trailing spaces in strings are preserved
 fn parse_csv_line(line: &str) -> Result<Vec<String>> {
     let mut columns = Vec::new();
     let mut current = String::new();
@@ -174,7 +175,7 @@ fn parse_csv_line(line: &str) -> Result<Vec<String>> {
             if c == '"' {
                 in_quotes = true;
             } else if c == ',' {
-                columns.push(current.trim().to_string());
+                columns.push(current);
                 current = String::new();
             } else {
                 current.push(c);
@@ -184,7 +185,7 @@ fn parse_csv_line(line: &str) -> Result<Vec<String>> {
     }
 
     // Add the last column
-    columns.push(current.trim().to_string());
+    columns.push(current);
 
     Ok(columns)
 }

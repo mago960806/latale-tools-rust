@@ -186,6 +186,7 @@ impl LdtWriter {
                 // Encode as GBK (LaTale uses GBK encoding for strings)
                 let (bytes, _, _) = encoding_rs::GBK.encode(&s);
                 let bytes = bytes.as_ref();
+                // Write length + content (no terminator)
                 writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
                 writer.write_all(bytes)?;
             }
@@ -194,6 +195,7 @@ impl LdtWriter {
                 // Encode as GBK
                 let (bytes, _, _) = encoding_rs::GBK.encode(&s);
                 let bytes = bytes.as_ref();
+                // Write length + content (no terminator)
                 writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
                 writer.write_all(bytes)?;
             }
@@ -202,6 +204,7 @@ impl LdtWriter {
                 let s = format!("{},{}", spf_id, row_id);
                 let (bytes, _, _) = encoding_rs::GBK.encode(&s);
                 let bytes = bytes.as_ref();
+                // Write length + content (no terminator)
                 writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
                 writer.write_all(bytes)?;
             }

@@ -152,7 +152,7 @@ impl LdtReader {
             }
 
             FieldType::String | FieldType::Alias | FieldType::FID => {
-                // Variable-length fields: 2-byte length prefix + data
+                // Variable-length fields: 2-byte length prefix + data (no terminator)
                 if offset + 2 > self.mmap.len() {
                     bail!("Unexpected end of file while reading string length at offset {}", offset);
                 }
