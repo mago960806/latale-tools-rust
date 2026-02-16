@@ -2,7 +2,7 @@
 //!
 //! This module provides zero-copy reading of LDT database files using memory mapping.
 
-use crate::ldt::{LdtHeader, FieldDef, FieldValue, FieldType, HEADER_SIZE};
+use crate::ldt::{LdtHeader, FieldDef, FieldValue, FieldType, Row, HEADER_SIZE, MAX_FIELDS};
 use anyhow::{bail, Context, Result};
 use memmap2::Mmap;
 use std::fs::File;
@@ -33,7 +33,7 @@ impl LdtReader {
         let header: LdtHeader = bytemuck::pod_read_unaligned(&mmap[0..HEADER_SIZE]);
 
         // Validate header
-        if header.num_fields < 0 || header.num_fields > 128 {
+        if header.num_fields < 0 || header.num_fields > MAX_FIELDS as i32 {
             bail!("Invalid field count: {}", header.num_fields);
         }
         if header.num_rows < 0 {
@@ -69,7 +69,7 @@ impl LdtReader {
     }
 
     /// Read all rows from the LDT file
-    pub fn read_rows(&self) -> Result<Vec<crate::ldt::Row>> {
+    pub fn read_rows(&self) -> Result<Vec<Row>> {
         let num_fields = self.header.num_fields as usize;
         let num_rows = self.header.num_rows as usize;
 
@@ -91,7 +91,7 @@ impl LdtReader {
 
     /// Read a single row starting at the given offset
     /// Returns (Row, next_offset)
-    fn read_row(&self, offset: usize, num_fields: usize) -> Result<(crate::ldt::Row, usize)> {
+    fn read_row(&self, offset: usize, num_fields: usize) -> Result<(Row, usize)> {
         let mut pos = offset;
 
         // Read primary key (4 bytes, stored as i64 in Row struct)
@@ -110,7 +110,7 @@ impl LdtReader {
             pos = new_pos;
         }
 
-        Ok((crate::ldt::Row { primary_key: primary_key as i64, values }, pos))
+        Ok((Row { primary_key: primary_key as i64, values }, pos))
     }
 
     /// Read a single field value starting at the given offset
@@ -177,8 +177,14 @@ impl LdtReader {
                         // FID format: "{spf_id},{row_id}"
                         let parts: Vec<&str> = s.split(',').collect();
                         if parts.len() == 2 {
-                            let spf_id: i32 = parts[0].parse().unwrap_or(0);
-                            let row_id: i64 = parts[1].parse().unwrap_or(0);
+                            let spf_id: i32 = parts[0].parse().unwrap_or_else(|_| {
+                                eprintln!("Warning: Failed to parse FID spf_id: {}", parts[0]);
+                                0
+                            });
+                            let row_id: i64 = parts[1].parse().unwrap_or_else(|_| {
+                                eprintln!("Warning: Failed to parse FID row_id: {}", parts[1]);
+                                0
+                            });
                             Ok((FieldValue::FID(spf_id, row_id), new_offset))
                         } else {
                             Ok((FieldValue::FID(0, 0), new_offset))

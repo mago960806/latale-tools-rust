@@ -2,7 +2,10 @@
 //!
 //! This module provides functionality to write LDT database files.
 
-use crate::ldt::{FieldDef, FieldValue, FieldType, Row, MAX_FIELDS, FIELD_NAME_SIZE};
+use crate::ldt::{
+    FieldDef, FieldValue, FieldType, Row, MAX_FIELDS, FIELD_NAME_SIZE,
+    FOOTER_MARKER, FOOTER_PADDING_SIZE, PADDING_BYTE, NULL_TERMINATOR,
+};
 use anyhow::{bail, Context, Result};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -32,13 +35,15 @@ impl LdtWriter {
                 name: name.to_string(),
                 field_type,
             });
+        } else {
+            eprintln!("Warning: Field limit reached, ignoring field: {}", name);
         }
         self
     }
 
-    /// Set field definitions
-    pub fn set_field_defs(&mut self, field_defs: Vec<FieldDef>) -> &mut Self {
-        self.field_defs = field_defs;
+    /// Set field definitions from a slice
+    pub fn set_field_defs(&mut self, field_defs: &[FieldDef]) -> &mut Self {
+        self.field_defs = field_defs.to_vec();
         self
     }
 
@@ -48,9 +53,9 @@ impl LdtWriter {
         self
     }
 
-    /// Set all rows
-    pub fn set_rows(&mut self, rows: Vec<Row>) -> &mut Self {
-        self.rows = rows;
+    /// Set all rows from a slice
+    pub fn set_rows(&mut self, rows: &[Row]) -> &mut Self {
+        self.rows = rows.to_vec();
         self
     }
 
@@ -86,8 +91,8 @@ impl LdtWriter {
         }
 
         // Write footer: "END" + 61 spaces (64 bytes total)
-        writer.write_all(b"END")?;
-        writer.write_all(&[0x20u8; 61])?;
+        writer.write_all(FOOTER_MARKER)?;
+        writer.write_all(&[PADDING_BYTE; FOOTER_PADDING_SIZE])?;
 
         writer.flush()
             .with_context(|| format!("Failed to flush LDT file: {}", path.display()))?;
@@ -114,11 +119,11 @@ impl LdtWriter {
         // Empty fields: all zeros (0x00)
         for i in 0..MAX_FIELDS {
             if i < self.field_defs.len() {
-                let mut name_bytes = [0x20u8; FIELD_NAME_SIZE]; // Fill with spaces
+                let mut name_bytes = [PADDING_BYTE; FIELD_NAME_SIZE]; // Fill with spaces
                 let name = self.field_defs[i].name.as_bytes();
                 let copy_len = name.len().min(FIELD_NAME_SIZE - 1);
                 name_bytes[..copy_len].copy_from_slice(&name[..copy_len]);
-                name_bytes[copy_len] = 0x00; // Null terminator
+                name_bytes[copy_len] = NULL_TERMINATOR; // Null terminator
                 writer.write_all(&name_bytes)?;
             } else {
                 // Empty field: all zeros
@@ -146,20 +151,15 @@ impl LdtWriter {
         writer.write_all(&pk.to_le_bytes())?;
 
         // Write field values
-        for (i, value) in row.values.iter().enumerate() {
-            let expected_type = if i < self.field_defs.len() {
-                self.field_defs[i].field_type
-            } else {
-                FieldType::NA
-            };
-            self.write_field_value(writer, value, expected_type)?;
+        for value in &row.values {
+            self.write_field_value(writer, value)?;
         }
 
         Ok(())
     }
 
     /// Write a single field value
-    fn write_field_value<W: Write>(&self, writer: &mut W, value: &FieldValue, _expected_type: FieldType) -> Result<()> {
+    fn write_field_value<W: Write>(&self, writer: &mut W, value: &FieldValue) -> Result<()> {
         match value {
             FieldValue::NA => {
                 // No bytes written for NA type
@@ -183,33 +183,30 @@ impl LdtWriter {
             }
 
             FieldValue::String(s) => {
-                // Encode as GBK (LaTale uses GBK encoding for strings)
-                let (bytes, _, _) = encoding_rs::GBK.encode(&s);
-                let bytes = bytes.as_ref();
-                // Write length + content (no terminator)
-                writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
-                writer.write_all(bytes)?;
+                Self::write_gbk_string(writer, s)?;
             }
 
             FieldValue::Alias(s) => {
-                // Encode as GBK
-                let (bytes, _, _) = encoding_rs::GBK.encode(&s);
-                let bytes = bytes.as_ref();
-                // Write length + content (no terminator)
-                writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
-                writer.write_all(bytes)?;
+                Self::write_gbk_string(writer, s)?;
             }
 
             FieldValue::FID(spf_id, row_id) => {
                 let s = format!("{},{}", spf_id, row_id);
-                let (bytes, _, _) = encoding_rs::GBK.encode(&s);
-                let bytes = bytes.as_ref();
-                // Write length + content (no terminator)
-                writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
-                writer.write_all(bytes)?;
+                Self::write_gbk_string(writer, &s)?;
             }
         }
 
+        Ok(())
+    }
+
+    /// Write a GBK-encoded string with length prefix
+    fn write_gbk_string<W: Write>(writer: &mut W, s: &str) -> Result<()> {
+        // Encode as GBK (LaTale uses GBK encoding for strings)
+        let (bytes, _, _) = encoding_rs::GBK.encode(s);
+        let bytes = bytes.as_ref();
+        // Write length + content (no terminator)
+        writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
+        writer.write_all(bytes)?;
         Ok(())
     }
 }

@@ -2,7 +2,9 @@
 //!
 //! This module provides import/export functionality between LDT and CSV formats.
 
-use crate::ldt::{FieldDef, FieldType, FieldValue, Row};
+use crate::ldt::{
+    FieldDef, FieldType, FieldValue, Row, CSV_ID_COLUMN_HEADER, CSV_TYPE_SEPARATOR, DEFAULT_DB_ID,
+};
 use anyhow::{Context, Result};
 use csv::{Reader, Writer};
 use std::io::{Read, Write};
@@ -10,18 +12,16 @@ use std::io::{Read, Write};
 /// Export LDT data to CSV format
 pub fn export_to_csv<W: Write>(
     writer: &mut W,
-    _db_id: i32,
     field_defs: &[FieldDef],
     rows: &[Row],
-    _name: &str,
 ) -> Result<()> {
     let mut csv_writer = Writer::from_writer(writer);
 
     // Write CSV header with type annotations
     // First column is always the primary key (int64)
-    let mut headers = vec!["ID:int64".to_string()];
+    let mut headers = vec![CSV_ID_COLUMN_HEADER.to_string()];
     for f in field_defs.iter() {
-        headers.push(format!("{}:{}", f.name, f.field_type.csv_type_name()));
+        headers.push(format!("{}{}{}", f.name, CSV_TYPE_SEPARATOR, f.field_type.csv_type_name()));
     }
     csv_writer
         .write_record(&headers)
@@ -57,7 +57,7 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
     let mut all_field_defs = Vec::with_capacity(headers.len());
     for header in headers.iter() {
         // Format: "fieldname:typename" or just "fieldname"
-        let parts: Vec<&str> = header.split(':').collect();
+        let parts: Vec<&str> = header.split(CSV_TYPE_SEPARATOR).collect();
         let name = parts[0].trim().to_string();
 
         let field_type = if parts.len() > 1 {
@@ -102,7 +102,7 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
     }
 
     // db_id is always 0 (default)
-    Ok((0, field_defs, rows))
+    Ok((DEFAULT_DB_ID, field_defs, rows))
 }
 
 #[cfg(test)]
@@ -147,14 +147,14 @@ mod tests {
 
         // Export to CSV
         let mut csv_output = Vec::new();
-        export_to_csv(&mut csv_output, 0, &field_defs, &rows, "TEST").unwrap();
+        export_to_csv(&mut csv_output, &field_defs, &rows).unwrap();
 
         // Import from CSV
         let csv_string = String::from_utf8(csv_output).unwrap();
         let (db_id, imported_defs, imported_rows) =
             import_from_csv(&mut csv_string.as_bytes()).unwrap();
 
-        assert_eq!(db_id, 0); // db_id is always 0
+        assert_eq!(db_id, DEFAULT_DB_ID); // db_id is always DEFAULT_DB_ID
         assert_eq!(imported_defs.len(), 3);
         assert_eq!(imported_rows.len(), 2);
         assert_eq!(imported_rows[0].primary_key, 1);
@@ -177,7 +177,7 @@ mod tests {
 
         // Export to CSV
         let mut csv_output = Vec::new();
-        export_to_csv(&mut csv_output, 0, &field_defs, &rows, "TEST").unwrap();
+        export_to_csv(&mut csv_output, &field_defs, &rows).unwrap();
 
         // Import from CSV
         let csv_string = String::from_utf8(csv_output).unwrap();
@@ -211,7 +211,7 @@ mod tests {
 
         // Export to CSV
         let mut csv_output = Vec::new();
-        export_to_csv(&mut csv_output, 0, &field_defs, &rows, "TEST").unwrap();
+        export_to_csv(&mut csv_output, &field_defs, &rows).unwrap();
 
         // Import from CSV
         let csv_string = String::from_utf8(csv_output).unwrap();

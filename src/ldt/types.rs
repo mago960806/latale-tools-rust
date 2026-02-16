@@ -18,6 +18,53 @@ pub const FIELD_NAME_SIZE: usize = 64;
 /// Layout: db_id(4) + num_fields(4) + num_rows(4) + field_names(128*64=8192) + field_types(128*4=512) = 8716
 pub const HEADER_SIZE: usize = 8716;
 
+// === File footer constants ===
+
+/// Footer marker string ("END")
+pub const FOOTER_MARKER: &[u8; 3] = b"END";
+
+/// Footer padding size (61 bytes of spaces)
+pub const FOOTER_PADDING_SIZE: usize = 61;
+
+/// Padding byte value (space character)
+pub const PADDING_BYTE: u8 = 0x20;
+
+/// Null terminator byte
+pub const NULL_TERMINATOR: u8 = 0x00;
+
+// === CSV related constants ===
+
+/// CSV header for the ID column with type annotation
+pub const CSV_ID_COLUMN_HEADER: &str = "ID:int64";
+
+/// Separator between field name and type in CSV headers
+pub const CSV_TYPE_SEPARATOR: char = ':';
+
+/// Default database ID value
+pub const DEFAULT_DB_ID: i32 = 0;
+
+// === File extension constants ===
+
+/// LDT file extension (lowercase)
+pub const LDT_EXTENSION: &str = "ldt";
+
+/// CSV file extension (lowercase)
+pub const CSV_EXTENSION: &str = "csv";
+
+/// LDT output file extension (uppercase)
+pub const LDT_OUTPUT_EXT: &str = ".LDT";
+
+/// CSV output file extension
+pub const CSV_OUTPUT_EXT: &str = ".csv";
+
+// === Default path constants ===
+
+/// Default input directory for LDT files
+pub const DEFAULT_LDT_DIR: &str = "DATA/LDT";
+
+/// Default output directory for CSV files
+pub const DEFAULT_CSV_DIR: &str = "DATA/CSV";
+
 // ============================================================================
 // FieldType Enum
 // ============================================================================
@@ -91,7 +138,7 @@ impl FieldType {
 
     /// Check if this field type uses variable-length storage
     pub fn is_variable_length(&self) -> bool {
-        matches!(self, FieldType::String | FieldType::Alias)
+        matches!(self, FieldType::String | FieldType::Alias | FieldType::FID)
     }
 }
 
@@ -162,20 +209,35 @@ impl FieldValue {
                 let lower = s.to_lowercase();
                 FieldValue::TF(lower == "true" || lower == "1" || lower == "yes")
             }
-            FieldType::Num => FieldValue::Num(s.parse().unwrap_or(0)),
-            FieldType::Per => FieldValue::Per(s.parse().unwrap_or(0.0)),
+            FieldType::Num => FieldValue::Num(s.parse().unwrap_or_else(|_| {
+                eprintln!("Warning: Failed to parse Num value: {}", s);
+                0
+            })),
+            FieldType::Per => FieldValue::Per(s.parse().unwrap_or_else(|_| {
+                eprintln!("Warning: Failed to parse Per value: {}", s);
+                0.0
+            })),
             FieldType::FID => {
                 let parts: Vec<&str> = s.split(',').collect();
                 if parts.len() == 2 {
-                    let spf_id: i32 = parts[0].parse().unwrap_or(0);
-                    let row_id: i64 = parts[1].parse().unwrap_or(0);
+                    let spf_id: i32 = parts[0].parse().unwrap_or_else(|_| {
+                        eprintln!("Warning: Failed to parse FID spf_id: {}", parts[0]);
+                        0
+                    });
+                    let row_id: i64 = parts[1].parse().unwrap_or_else(|_| {
+                        eprintln!("Warning: Failed to parse FID row_id: {}", parts[1]);
+                        0
+                    });
                     FieldValue::FID(spf_id, row_id)
                 } else {
                     FieldValue::FID(0, 0)
                 }
             }
             FieldType::Alias => FieldValue::Alias(s.to_string()),
-            FieldType::Num64 => FieldValue::Num64(s.parse().unwrap_or(0)),
+            FieldType::Num64 => FieldValue::Num64(s.parse().unwrap_or_else(|_| {
+                eprintln!("Warning: Failed to parse Num64 value: {}", s);
+                0
+            })),
         }
     }
 }
@@ -310,7 +372,7 @@ mod tests {
         assert!(!FieldType::TF.is_variable_length());
         assert!(!FieldType::Num.is_variable_length());
         assert!(!FieldType::Per.is_variable_length());
-        assert!(!FieldType::FID.is_variable_length());
+        assert!(FieldType::FID.is_variable_length());
         assert!(FieldType::Alias.is_variable_length());
         assert!(!FieldType::Num64.is_variable_length());
     }

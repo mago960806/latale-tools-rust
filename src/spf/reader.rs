@@ -151,7 +151,7 @@ impl SpfReader {
 
     /// 解包所有文件到指定目录
     /// callback: 可选回调函数 (current, total, filename)，用于显示进度
-    pub fn unpack(&self, output_dir: &Path, callback: Option<&dyn Fn(usize, usize, &str)>) -> Result<()> {
+    pub fn unpack(&self, output_dir: &Path, callback: super::ProgressCallback) -> Result<()> {
         use std::fs;
         use std::io::Write;
 

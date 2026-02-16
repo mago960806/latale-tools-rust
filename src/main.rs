@@ -1,17 +1,18 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use latale_tools::spf::{SpfReader, SpfRegistry, SpfWriter};
+use latale_tools::common::{GB, KB, MB, MILLIS_PER_SECOND, SEPARATOR_WIDTH};
+use latale_tools::spf::{SpfReader, SpfRegistry, SpfWriter, SPF_EXTENSION};
 use std::path::PathBuf;
 use std::time::Instant;
 
 // 格式化字节数为人类可读格式
 fn format_size(size: usize) -> String {
-    if size >= 1024 * 1024 * 1024 {
-        format!("{:.2} GB", size as f64 / (1024.0 * 1024.0 * 1024.0))
-    } else if size >= 1024 * 1024 {
-        format!("{:.2} MB", size as f64 / (1024.0 * 1024.0))
-    } else if size >= 1024 {
-        format!("{:.2} KB", size as f64 / 1024.0)
+    if size >= GB as usize {
+        format!("{:.2} GB", size as f64 / GB)
+    } else if size >= MB as usize {
+        format!("{:.2} MB", size as f64 / MB)
+    } else if size >= KB as usize {
+        format!("{:.2} KB", size as f64 / KB)
     } else {
         format!("{} B", size)
     }
@@ -19,16 +20,16 @@ fn format_size(size: usize) -> String {
 
 // 格式化耗时：小于1秒显示毫秒，大于等于1秒显示秒
 fn format_duration(millis: u128) -> String {
-    if millis < 1000 {
+    if millis < MILLIS_PER_SECOND {
         format!("{:.2} ms", millis as f64)
     } else {
-        format!("{:.2} s", millis as f64 / 1000.0)
+        format!("{:.2} s", millis as f64 / MILLIS_PER_SECOND as f64)
     }
 }
 
 // 打印分隔线
 fn print_separator() {
-    println!("{}", "-".repeat(60));
+    println!("{}", "-".repeat(SEPARATOR_WIDTH));
 }
 
 /// 打印分节标题（支持带额外信息）
@@ -288,9 +289,9 @@ fn cmd_pack(
     // 输出路径：有 -o 则直接使用，否则默认为当前目录下的 {name}.SPF
     let output_path = output
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::path::Path::new(".").join(format!("{}.SPF", registry.name)));
+        .unwrap_or_else(|| std::path::Path::new(".").join(format!("{}{}", registry.name, SPF_EXTENSION)));
 
-    print_section_header("打包", format!("{}.SPF", registry.name));
+    print_section_header("打包", format!("{}{}", registry.name, SPF_EXTENSION));
     println!("文件编号:    {} (0x{:02X})", registry.file_id, registry.file_id);
     println!("版本号:      {}", version.unwrap_or(registry.version));
     println!("文件名编码:  {}", encoding);

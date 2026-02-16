@@ -93,7 +93,7 @@ impl SpfWriter {
 
     /// 写入 SPF 文件
     /// callback: 可选回调函数 (current, total, filename)，用于显示进度
-    pub fn write(&self, output_path: &Path, callback: Option<&dyn Fn(usize, usize, &str)>) -> Result<()> {
+    pub fn write(&self, output_path: &Path, callback: super::ProgressCallback) -> Result<()> {
         let file = File::create(output_path)
             .with_context(|| format!("Failed to create: {}", output_path.display()))?;
         let mut writer = BufWriter::new(file);

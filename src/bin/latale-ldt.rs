@@ -1,17 +1,21 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use latale_tools::ldt::{export_to_csv, import_from_csv, LdtReader, LdtWriter};
+use latale_tools::common::{GB, KB, MB, MILLIS_PER_SECOND, SEPARATOR_WIDTH};
+use latale_tools::ldt::{
+    export_to_csv, import_from_csv, LdtReader, LdtWriter, CSV_EXTENSION, CSV_OUTPUT_EXT,
+    DEFAULT_CSV_DIR, DEFAULT_LDT_DIR, LDT_EXTENSION, LDT_OUTPUT_EXT,
+};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 // 格式化字节数为人类可读格式
 fn format_size(size: usize) -> String {
-    if size >= 1024 * 1024 * 1024 {
-        format!("{:.2} GB", size as f64 / (1024.0 * 1024.0 * 1024.0))
-    } else if size >= 1024 * 1024 {
-        format!("{:.2} MB", size as f64 / (1024.0 * 1024.0))
-    } else if size >= 1024 {
-        format!("{:.2} KB", size as f64 / 1024.0)
+    if size >= GB as usize {
+        format!("{:.2} GB", size as f64 / GB)
+    } else if size >= MB as usize {
+        format!("{:.2} MB", size as f64 / MB)
+    } else if size >= KB as usize {
+        format!("{:.2} KB", size as f64 / KB)
     } else {
         format!("{} B", size)
     }
@@ -19,16 +23,16 @@ fn format_size(size: usize) -> String {
 
 // 格式化耗时：小于1秒显示毫秒，大于等于1秒显示秒
 fn format_duration(millis: u128) -> String {
-    if millis < 1000 {
+    if millis < MILLIS_PER_SECOND {
         format!("{} ms", millis)
     } else {
-        format!("{:.2} s", millis as f64 / 1000.0)
+        format!("{:.2} s", millis as f64 / MILLIS_PER_SECOND as f64)
     }
 }
 
 // 打印分隔线
 fn print_separator() {
-    println!("{}", "-".repeat(60));
+    println!("{}", "-".repeat(SEPARATOR_WIDTH));
 }
 
 /// 打印分节标题
@@ -163,14 +167,14 @@ fn cmd_info(ldt_file: &std::path::Path, preview_rows: usize) -> Result<()> {
 }
 
 fn cmd_convert(input: Option<&std::path::Path>, output: Option<&std::path::Path>) -> Result<()> {
-    let input = input.unwrap_or_else(|| std::path::Path::new("DATA/LDT"));
+    let input = input.unwrap_or_else(|| std::path::Path::new(DEFAULT_LDT_DIR));
 
     if !input.exists() {
         bail!("输入路径不存在: {}", input.display());
     }
 
     if input.is_file() {
-        convert_single_file(input, output)
+        convert_single_file(input, output, false)
     } else if input.is_dir() {
         convert_directory(input, output)
     } else {
@@ -179,7 +183,12 @@ fn cmd_convert(input: Option<&std::path::Path>, output: Option<&std::path::Path>
 }
 
 /// 转换单个文件
-fn convert_single_file(input: &Path, output: Option<&Path>) -> Result<()> {
+///
+/// # Arguments
+/// * `input` - 输入文件路径
+/// * `output` - 输出路径（可选），可以是文件或目录
+/// * `silent` - 是否静默模式（不打印进度信息）
+fn convert_single_file(input: &Path, output: Option<&Path>, silent: bool) -> Result<()> {
     let input_ext = input
         .extension()
         .and_then(|e| e.to_str())
@@ -187,52 +196,54 @@ fn convert_single_file(input: &Path, output: Option<&Path>) -> Result<()> {
         .unwrap_or_default();
 
     match input_ext.as_str() {
-        "ldt" => {
+        ext if ext == LDT_EXTENSION => {
             // LDT → CSV
             let output_path = output
                 .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| {
                     // 默认输出到 DATA/CSV/{name}.csv
                     let name = input.file_stem().unwrap_or_default();
-                    PathBuf::from("DATA/CSV").join(format!("{}.csv", name.to_string_lossy()))
+                    PathBuf::from(DEFAULT_CSV_DIR).join(format!("{}{}", name.to_string_lossy(), CSV_OUTPUT_EXT))
                 });
 
             // 如果输出路径是目录，则在其中创建文件
             let output_path = if output_path.extension().is_none() {
                 let name = input.file_stem().unwrap_or_default();
-                output_path.join(format!("{}.csv", name.to_string_lossy()))
+                output_path.join(format!("{}{}", name.to_string_lossy(), CSV_OUTPUT_EXT))
             } else {
                 output_path
             };
 
-            convert_ldt_to_csv(input, &output_path)?;
+            convert_ldt_to_csv(input, &output_path, silent)?;
         }
 
-        "csv" => {
+        ext if ext == CSV_EXTENSION => {
             // CSV → LDT
             let output_path = output
                 .map(|p| p.to_path_buf())
                 .unwrap_or_else(|| {
                     // 默认输出到 DATA/LDT/{name}.LDT
                     let name = input.file_stem().unwrap_or_default();
-                    PathBuf::from("DATA/LDT").join(format!("{}.LDT", name.to_string_lossy()))
+                    PathBuf::from(DEFAULT_LDT_DIR).join(format!("{}{}", name.to_string_lossy(), LDT_OUTPUT_EXT))
                 });
 
             // 如果输出路径是目录，则在其中创建文件
             let output_path = if output_path.extension().is_none() {
                 let name = input.file_stem().unwrap_or_default();
-                output_path.join(format!("{}.LDT", name.to_string_lossy()))
+                output_path.join(format!("{}{}", name.to_string_lossy(), LDT_OUTPUT_EXT))
             } else {
                 output_path
             };
 
-            convert_csv_to_ldt(input, &output_path)?;
+            convert_csv_to_ldt(input, &output_path, silent)?;
         }
 
         _ => {
             bail!(
-                "不支持的文件格式: {}，请使用 .LDT 或 .csv 文件",
-                input_ext
+                "不支持的文件格式: {}，请使用 {} 或 {} 文件",
+                input_ext,
+                LDT_OUTPUT_EXT,
+                CSV_OUTPUT_EXT
             );
         }
     }
@@ -246,24 +257,33 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
     let (ldt_files, csv_files) = count_files_by_type(input)?;
 
     // 混合类型报错
-    if ldt_files.len() > 0 && csv_files.len() > 0 {
+    if !ldt_files.is_empty() && !csv_files.is_empty() {
         bail!(
-            "目录中同时存在 .LDT 和 .csv 文件，请分开处理。\n\
-             找到 {} 个 .LDT 文件和 {} 个 .csv 文件",
+            "目录中同时存在 {} 和 {} 文件，请分开处理。\n\
+             找到 {} 个 {} 文件和 {} 个 {} 文件",
+            LDT_OUTPUT_EXT,
+            CSV_OUTPUT_EXT,
             ldt_files.len(),
-            csv_files.len()
+            LDT_OUTPUT_EXT,
+            csv_files.len(),
+            CSV_OUTPUT_EXT
         );
     }
 
     if ldt_files.is_empty() && csv_files.is_empty() {
-        bail!("目录中没有 .LDT 或 .csv 文件: {}", input.display());
+        bail!(
+            "目录中没有 {} 或 {} 文件: {}",
+            LDT_OUTPUT_EXT,
+            CSV_OUTPUT_EXT,
+            input.display()
+        );
     }
 
     // 确定转换方向和默认输出
     let (files, default_output_dir, direction) = if !ldt_files.is_empty() {
-        (ldt_files, "DATA/CSV", "LDT → CSV")
+        (ldt_files, DEFAULT_CSV_DIR, "LDT → CSV")
     } else {
-        (csv_files, "DATA/LDT", "CSV → LDT")
+        (csv_files, DEFAULT_LDT_DIR, "CSV → LDT")
     };
 
     let output_dir = output
@@ -302,7 +322,7 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
         let file_name = file.file_name().unwrap_or_default().to_string_lossy();
         print!("  [{}/{}] {} ... ", i + 1, files.len(), file_name);
 
-        match convert_single_file_silent(file, &output_dir) {
+        match convert_single_file(file, Some(output_dir.as_path()), true) {
             Ok(_) => {
                 println!("完成");
                 success_count += 1;
@@ -327,31 +347,15 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-/// 静默转换单个文件（用于批量转换）
-fn convert_single_file_silent(input: &Path, output_dir: &Path) -> Result<()> {
-    let input_ext = input
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_lowercase())
-        .unwrap_or_default();
+/// LDT → CSV 转换
+///
+/// # Arguments
+/// * `input` - 输入 LDT 文件路径
+/// * `output_path` - 输出 CSV 文件路径
+/// * `silent` - 是否静默模式（不打印进度信息）
+fn convert_ldt_to_csv(input: &Path, output_path: &Path, silent: bool) -> Result<()> {
+    let start = Instant::now();
 
-    let name = input.file_stem().unwrap_or_default();
-
-    match input_ext.as_str() {
-        "ldt" => {
-            let output_path = output_dir.join(format!("{}.csv", name.to_string_lossy()));
-            convert_ldt_to_csv_internal(input, &output_path)
-        }
-        "csv" => {
-            let output_path = output_dir.join(format!("{}.LDT", name.to_string_lossy()));
-            convert_csv_to_ldt_internal(input, &output_path)
-        }
-        _ => bail!("不支持的文件格式: {}", input_ext),
-    }
-}
-
-/// LDT → CSV 转换（内部实现，不打印输出）
-fn convert_ldt_to_csv_internal(input: &Path, output_path: &Path) -> Result<()> {
     // 读取 LDT
     let reader = LdtReader::open(input)
         .with_context(|| format!("无法打开 LDT 文件: {}", input.display()))?;
@@ -360,12 +364,6 @@ fn convert_ldt_to_csv_internal(input: &Path, output_path: &Path) -> Result<()> {
     let field_defs = reader.field_defs();
     let rows = reader.read_rows().context("读取数据行失败")?;
 
-    // 提取数据库名称
-    let db_name = input
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Unknown");
-
     // 确保输出目录存在
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)
@@ -375,83 +373,34 @@ fn convert_ldt_to_csv_internal(input: &Path, output_path: &Path) -> Result<()> {
     // 写入 CSV
     let mut file = std::fs::File::create(output_path)
         .with_context(|| format!("无法创建 CSV 文件: {}", output_path.display()))?;
-    export_to_csv(&mut file, db_id, &field_defs, &rows, db_name)
+    export_to_csv(&mut file, &field_defs, &rows)
         .context("写入 CSV 文件失败")?;
 
-    Ok(())
-}
+    if !silent {
+        let elapsed = start.elapsed().as_millis();
 
-/// LDT → CSV 转换（带打印输出）
-fn convert_ldt_to_csv(input: &Path, output_path: &Path) -> Result<()> {
-    let start = Instant::now();
-
-    // 读取 LDT 获取信息用于打印
-    let reader = LdtReader::open(input)
-        .with_context(|| format!("无法打开 LDT 文件: {}", input.display()))?;
-
-    let db_id = reader.db_id();
-    let field_defs = reader.field_defs();
-    let rows = reader.read_rows().context("读取数据行失败")?;
-
-    // 提取数据库名称
-    let db_name = input
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Unknown");
-
-    // 确保输出目录存在
-    if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("无法创建输出目录: {}", parent.display()))?;
+        // 打印信息
+        print_section_header("转换", "LDT → CSV");
+        println!("输入文件:    {}", input.display());
+        println!("输出文件:    {}", output_path.display());
+        println!("数据库 ID:   {}", db_id);
+        println!("字段数量:    {}", field_defs.len());
+        println!("数据行数:    {}", rows.len());
+        println!();
+        println!("[完成] 转换完成，耗时 {}", format_duration(elapsed));
+        println!();
     }
 
-    // 写入 CSV
-    let mut file = std::fs::File::create(output_path)
-        .with_context(|| format!("无法创建 CSV 文件: {}", output_path.display()))?;
-    export_to_csv(&mut file, db_id, &field_defs, &rows, db_name)
-        .context("写入 CSV 文件失败")?;
-
-    let elapsed = start.elapsed().as_millis();
-
-    // 打印信息
-    print_section_header("转换", "LDT → CSV");
-    println!("输入文件:    {}", input.display());
-    println!("输出文件:    {}", output_path.display());
-    println!("数据库 ID:   {}", db_id);
-    println!("字段数量:    {}", field_defs.len());
-    println!("数据行数:    {}", rows.len());
-    println!();
-    println!("[完成] 转换完成，耗时 {}", format_duration(elapsed));
-    println!();
-
     Ok(())
 }
 
-/// CSV → LDT 转换（内部实现，不打印输出）
-fn convert_csv_to_ldt_internal(input: &Path, output_path: &Path) -> Result<()> {
-    // 读取 CSV
-    let mut file = std::fs::File::open(input)
-        .with_context(|| format!("无法打开 CSV 文件: {}", input.display()))?;
-    let (db_id, field_defs, rows) =
-        import_from_csv(&mut file).context("读取 CSV 文件失败")?;
-
-    // 确保输出目录存在
-    if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("无法创建输出目录: {}", parent.display()))?;
-    }
-
-    // 写入 LDT
-    let mut writer = LdtWriter::new(db_id);
-    writer.set_field_defs(field_defs);
-    writer.set_rows(rows);
-    writer.write(output_path).context("写入 LDT 文件失败")?;
-
-    Ok(())
-}
-
-/// CSV → LDT 转换（带打印输出）
-fn convert_csv_to_ldt(input: &Path, output_path: &Path) -> Result<()> {
+/// CSV → LDT 转换
+///
+/// # Arguments
+/// * `input` - 输入 CSV 文件路径
+/// * `output_path` - 输出 LDT 文件路径
+/// * `silent` - 是否静默模式（不打印进度信息）
+fn convert_csv_to_ldt(input: &Path, output_path: &Path, silent: bool) -> Result<()> {
     let start = Instant::now();
 
     // 读取 CSV
@@ -468,22 +417,24 @@ fn convert_csv_to_ldt(input: &Path, output_path: &Path) -> Result<()> {
 
     // 写入 LDT
     let mut writer = LdtWriter::new(db_id);
-    writer.set_field_defs(field_defs.clone());
-    writer.set_rows(rows.clone());
+    writer.set_field_defs(&field_defs);
+    writer.set_rows(&rows);
     writer.write(output_path).context("写入 LDT 文件失败")?;
 
-    let elapsed = start.elapsed().as_millis();
+    if !silent {
+        let elapsed = start.elapsed().as_millis();
 
-    // 打印信息
-    print_section_header("转换", "CSV → LDT");
-    println!("输入文件:    {}", input.display());
-    println!("输出文件:    {}", output_path.display());
-    println!("数据库 ID:   {}", db_id);
-    println!("字段数量:    {}", field_defs.len());
-    println!("数据行数:    {}", rows.len());
-    println!();
-    println!("[完成] 转换完成，耗时 {}", format_duration(elapsed));
-    println!();
+        // 打印信息
+        print_section_header("转换", "CSV → LDT");
+        println!("输入文件:    {}", input.display());
+        println!("输出文件:    {}", output_path.display());
+        println!("数据库 ID:   {}", db_id);
+        println!("字段数量:    {}", field_defs.len());
+        println!("数据行数:    {}", rows.len());
+        println!();
+        println!("[完成] 转换完成，耗时 {}", format_duration(elapsed));
+        println!();
+    }
 
     Ok(())
 }
@@ -511,23 +462,20 @@ fn count_files_by_type(dir: &Path) -> Result<(Vec<PathBuf>, Vec<PathBuf>)> {
             .unwrap_or_default();
 
         match ext.as_str() {
-            "ldt" => ldt_files.push(path),
-            "csv" => csv_files.push(path),
+            ext if ext == LDT_EXTENSION => ldt_files.push(path),
+            ext if ext == CSV_EXTENSION => csv_files.push(path),
             _ => {}
         }
     }
 
     // 按文件名排序
-    ldt_files.sort_by(|a, b| {
-        a.file_name()
-            .unwrap_or_default()
-            .cmp(&b.file_name().unwrap_or_default())
-    });
-    csv_files.sort_by(|a, b| {
-        a.file_name()
-            .unwrap_or_default()
-            .cmp(&b.file_name().unwrap_or_default())
-    });
+    sort_files_by_name(&mut ldt_files);
+    sort_files_by_name(&mut csv_files);
 
     Ok((ldt_files, csv_files))
+}
+
+/// 按文件名排序文件列表
+fn sort_files_by_name(files: &mut [PathBuf]) {
+    files.sort_by_key(|f| f.file_name().unwrap_or_default().to_os_string());
 }
