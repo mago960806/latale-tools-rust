@@ -57,11 +57,16 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
     let mut all_field_defs = Vec::with_capacity(headers.len());
     for header in headers.iter() {
         // Format: "fieldname:typename" or just "fieldname"
+        // Note: Don't trim - preserve spaces in field names, and warn if type has unexpected spaces
         let parts: Vec<&str> = header.split(CSV_TYPE_SEPARATOR).collect();
-        let name = parts[0].trim().to_string();
+        let name = parts[0].to_string();
 
         let field_type = if parts.len() > 1 {
-            FieldType::from_csv_type_name(parts[1].trim()).unwrap_or(FieldType::NA)
+            let type_str = parts[1];
+            if type_str != type_str.trim() {
+                eprintln!("Warning: Type name '{}' has leading/trailing spaces in header: {}", type_str, header);
+            }
+            FieldType::from_csv_type_name(type_str).unwrap_or(FieldType::NA)
         } else {
             FieldType::NA
         };

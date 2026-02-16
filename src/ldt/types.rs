@@ -199,7 +199,17 @@ impl FieldValue {
     /// Parse from CSV string with the given field type
     pub fn from_csv_string(s: &str, ty: FieldType) -> Self {
         if s.is_empty() {
-            return FieldValue::NA;
+            // Return type-appropriate "empty" value based on field type
+            return match ty {
+                FieldType::NA => FieldValue::NA,
+                FieldType::String => FieldValue::String(String::new()),
+                FieldType::TF => FieldValue::TF(false),
+                FieldType::Num => FieldValue::Num(0),
+                FieldType::Per => FieldValue::Per(0.0),
+                FieldType::FID => FieldValue::FID(0, 0),
+                FieldType::Alias => FieldValue::Alias(String::new()),
+                FieldType::Num64 => FieldValue::Num64(0),
+            };
         }
 
         match ty {
