@@ -85,7 +85,11 @@ const _: () = assert!(std::mem::size_of::<FInfo>() == FINFO_SIZE);
 impl FInfo {
     /// 获取文件名原始字节（去除尾部的 null 字符）
     pub fn file_name_bytes(&self) -> &[u8] {
-        let end = self.file_name.iter().position(|&b| b == 0).unwrap_or(FILE_NAME_SIZE);
+        let end = self
+            .file_name
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(FILE_NAME_SIZE);
         &self.file_name[..end]
     }
 
@@ -95,7 +99,10 @@ impl FInfo {
     }
 
     /// 获取文件名字符串，使用指定编码或默认 GBK
-    pub fn file_name_str_with_encoding(&self, encoding: Option<&'static encoding_rs::Encoding>) -> String {
+    pub fn file_name_str_with_encoding(
+        &self,
+        encoding: Option<&'static encoding_rs::Encoding>,
+    ) -> String {
         let bytes = self.file_name_bytes();
         let enc = encoding.unwrap_or(encoding_rs::GBK);
         let (s, _, _) = enc.decode(bytes);

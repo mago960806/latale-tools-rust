@@ -1,5 +1,5 @@
-use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, DESC_SIZE};
 use crate::spf::types::encoding_from_name;
+use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, DESC_SIZE};
 use anyhow::{bail, Context, Result};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -69,7 +69,8 @@ impl SpfWriter {
         for entry in entries.filter_map(|e| e.ok()) {
             let path = entry.path();
             if path.is_file() {
-                let relative = path.strip_prefix(data_dir)
+                let relative = path
+                    .strip_prefix(data_dir)
                     .context("Failed to strip prefix")?;
 
                 let name = relative.to_string_lossy().replace('\\', "/");
@@ -129,7 +130,8 @@ impl SpfWriter {
             finfos.push(finfo);
 
             // 写入数据
-            writer.write_all(data)
+            writer
+                .write_all(data)
                 .context("Failed to write file data")?;
             current_offset += data.len() as i32;
 
@@ -142,8 +144,7 @@ impl SpfWriter {
         // 2. 写入 FINFO 索引表
         for finfo in &finfos {
             let bytes: &[u8] = bytemuck::bytes_of(finfo);
-            writer.write_all(bytes)
-                .context("Failed to write FINFO")?;
+            writer.write_all(bytes).context("Failed to write FINFO")?;
         }
 
         // 3. 写入 SPF 头
@@ -153,15 +154,16 @@ impl SpfWriter {
             desc: self.desc,
         };
         let header_bytes: &[u8] = bytemuck::bytes_of(&header);
-        writer.write_all(header_bytes)
+        writer
+            .write_all(header_bytes)
             .context("Failed to write header")?;
 
         // 4. 写入版本号
-        writer.write_all(&self.version.to_le_bytes())
+        writer
+            .write_all(&self.version.to_le_bytes())
             .context("Failed to write version")?;
 
-        writer.flush()
-            .context("Failed to flush")?;
+        writer.flush().context("Failed to flush")?;
 
         Ok(())
     }

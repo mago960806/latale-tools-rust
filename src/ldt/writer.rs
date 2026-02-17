@@ -3,8 +3,8 @@
 //! This module provides functionality to write LDT database files.
 
 use crate::ldt::{
-    FieldDef, FieldValue, FieldType, Row, MAX_FIELDS, FIELD_NAME_SIZE,
-    FOOTER_MARKER, FOOTER_PADDING_SIZE, PADDING_BYTE, NULL_TERMINATOR,
+    FieldDef, FieldType, FieldValue, Row, FIELD_NAME_SIZE, FOOTER_MARKER, FOOTER_PADDING_SIZE,
+    MAX_FIELDS, NULL_TERMINATOR, PADDING_BYTE,
 };
 use anyhow::{bail, Context, Result};
 use std::fs::File;
@@ -75,7 +75,11 @@ impl LdtWriter {
             bail!("Cannot write LDT file with no fields");
         }
         if self.field_defs.len() > MAX_FIELDS {
-            bail!("Too many fields: {} (max: {})", self.field_defs.len(), MAX_FIELDS);
+            bail!(
+                "Too many fields: {} (max: {})",
+                self.field_defs.len(),
+                MAX_FIELDS
+            );
         }
 
         let file = File::create(path)
@@ -94,7 +98,8 @@ impl LdtWriter {
         writer.write_all(FOOTER_MARKER)?;
         writer.write_all(&[PADDING_BYTE; FOOTER_PADDING_SIZE])?;
 
-        writer.flush()
+        writer
+            .flush()
             .with_context(|| format!("Failed to flush LDT file: {}", path.display()))?;
 
         Ok(())

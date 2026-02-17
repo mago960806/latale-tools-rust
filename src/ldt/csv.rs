@@ -21,7 +21,12 @@ pub fn export_to_csv<W: Write>(
     // First column is always the primary key (int64)
     let mut headers = vec![CSV_ID_COLUMN_HEADER.to_string()];
     for f in field_defs.iter() {
-        headers.push(format!("{}{}{}", f.name, CSV_TYPE_SEPARATOR, f.field_type.csv_type_name()));
+        headers.push(format!(
+            "{}{}{}",
+            f.name,
+            CSV_TYPE_SEPARATOR,
+            f.field_type.csv_type_name()
+        ));
     }
     csv_writer
         .write_record(&headers)
@@ -50,9 +55,7 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
     let mut csv_reader = Reader::from_reader(reader);
 
     // Parse field definitions from header
-    let headers = csv_reader
-        .headers()
-        .context("Failed to read CSV headers")?;
+    let headers = csv_reader.headers().context("Failed to read CSV headers")?;
 
     let mut all_field_defs = Vec::with_capacity(headers.len());
     for header in headers.iter() {
@@ -64,7 +67,10 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
         let field_type = if parts.len() > 1 {
             let type_str = parts[1];
             if type_str != type_str.trim() {
-                eprintln!("Warning: Type name '{}' has leading/trailing spaces in header: {}", type_str, header);
+                eprintln!(
+                    "Warning: Type name '{}' has leading/trailing spaces in header: {}",
+                    type_str, header
+                );
             }
             FieldType::from_csv_type_name(type_str).unwrap_or(FieldType::NA)
         } else {
@@ -103,7 +109,10 @@ pub fn import_from_csv<R: Read>(reader: &mut R) -> Result<(i32, Vec<FieldDef>, V
             values.push(FieldValue::from_csv_string(col, field_type));
         }
 
-        rows.push(Row { primary_key, values });
+        rows.push(Row {
+            primary_key,
+            values,
+        });
     }
 
     // db_id is always 0 (default)
@@ -175,9 +184,7 @@ mod tests {
 
         let rows = vec![Row {
             primary_key: 1,
-            values: vec![FieldValue::String(
-                "Line1\nLine2,\"quoted\",".to_string(),
-            )],
+            values: vec![FieldValue::String("Line1\nLine2,\"quoted\",".to_string())],
         }];
 
         // Export to CSV

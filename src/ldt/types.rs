@@ -293,7 +293,10 @@ impl LdtHeader {
         }
 
         let name_bytes = &self.field_names[index];
-        let end = name_bytes.iter().position(|&b| b == 0).unwrap_or(FIELD_NAME_SIZE);
+        let end = name_bytes
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(FIELD_NAME_SIZE);
         String::from_utf8_lossy(&name_bytes[..end]).into_owned()
     }
 
@@ -370,7 +373,10 @@ mod tests {
     #[test]
     fn test_field_type_from_csv_type_name() {
         assert_eq!(FieldType::from_csv_type_name("na"), Some(FieldType::NA));
-        assert_eq!(FieldType::from_csv_type_name("STRING"), Some(FieldType::String));
+        assert_eq!(
+            FieldType::from_csv_type_name("STRING"),
+            Some(FieldType::String)
+        );
         assert_eq!(FieldType::from_csv_type_name("Bool"), Some(FieldType::TF));
         assert_eq!(FieldType::from_csv_type_name("invalid"), None);
     }
@@ -390,12 +396,18 @@ mod tests {
     #[test]
     fn test_field_value_field_type() {
         assert_eq!(FieldValue::NA.field_type(), FieldType::NA);
-        assert_eq!(FieldValue::String("test".into()).field_type(), FieldType::String);
+        assert_eq!(
+            FieldValue::String("test".into()).field_type(),
+            FieldType::String
+        );
         assert_eq!(FieldValue::TF(true).field_type(), FieldType::TF);
         assert_eq!(FieldValue::Num(42).field_type(), FieldType::Num);
         assert_eq!(FieldValue::Per(3.14).field_type(), FieldType::Per);
         assert_eq!(FieldValue::FID(1, 100).field_type(), FieldType::FID);
-        assert_eq!(FieldValue::Alias("alias".into()).field_type(), FieldType::Alias);
+        assert_eq!(
+            FieldValue::Alias("alias".into()).field_type(),
+            FieldType::Alias
+        );
         assert_eq!(FieldValue::Num64(9999999999).field_type(), FieldType::Num64);
     }
 
@@ -412,21 +424,42 @@ mod tests {
 
     #[test]
     fn test_field_value_from_csv_string() {
-        assert_eq!(FieldValue::from_csv_string("", FieldType::NA), FieldValue::NA);
+        assert_eq!(
+            FieldValue::from_csv_string("", FieldType::NA),
+            FieldValue::NA
+        );
         assert_eq!(
             FieldValue::from_csv_string("test", FieldType::String),
             FieldValue::String("test".into())
         );
-        assert_eq!(FieldValue::from_csv_string("true", FieldType::TF), FieldValue::TF(true));
-        assert_eq!(FieldValue::from_csv_string("false", FieldType::TF), FieldValue::TF(false));
-        assert_eq!(FieldValue::from_csv_string("42", FieldType::Num), FieldValue::Num(42));
-        assert_eq!(FieldValue::from_csv_string("3.14", FieldType::Per), FieldValue::Per(3.14));
-        assert_eq!(FieldValue::from_csv_string("1,100", FieldType::FID), FieldValue::FID(1, 100));
+        assert_eq!(
+            FieldValue::from_csv_string("true", FieldType::TF),
+            FieldValue::TF(true)
+        );
+        assert_eq!(
+            FieldValue::from_csv_string("false", FieldType::TF),
+            FieldValue::TF(false)
+        );
+        assert_eq!(
+            FieldValue::from_csv_string("42", FieldType::Num),
+            FieldValue::Num(42)
+        );
+        assert_eq!(
+            FieldValue::from_csv_string("3.14", FieldType::Per),
+            FieldValue::Per(3.14)
+        );
+        assert_eq!(
+            FieldValue::from_csv_string("1,100", FieldType::FID),
+            FieldValue::FID(1, 100)
+        );
         assert_eq!(
             FieldValue::from_csv_string("alias_val", FieldType::Alias),
             FieldValue::Alias("alias_val".into())
         );
-        assert_eq!(FieldValue::from_csv_string("9999999999", FieldType::Num64), FieldValue::Num64(9999999999));
+        assert_eq!(
+            FieldValue::from_csv_string("9999999999", FieldType::Num64),
+            FieldValue::Num64(9999999999)
+        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
-use crate::spf::{FInfo, SpfHeader, SpfVersion, SpfRegistry};
 use crate::spf::types::encoding_from_name;
+use crate::spf::{FInfo, SpfHeader, SpfRegistry, SpfVersion};
 use anyhow::{bail, Context, Result};
 use memmap2::Mmap;
 use std::fs::File;
@@ -43,7 +43,12 @@ impl SpfReader {
         let encoding = SpfRegistry::find_by_file_id(header.file_id as u8)
             .map(|r| encoding_from_name(r.encoding));
 
-        Ok(Self { mmap, header, version, encoding })
+        Ok(Self {
+            mmap,
+            header,
+            version,
+            encoding,
+        })
     }
 
     /// 获取 SPF 版本号
@@ -85,7 +90,8 @@ impl SpfReader {
         let mut finfos = Vec::with_capacity(count);
         for i in 0..count {
             let offset = index_start + i * finfo_size;
-            let finfo: FInfo = bytemuck::pod_read_unaligned(&self.mmap[offset..offset + finfo_size]);
+            let finfo: FInfo =
+                bytemuck::pod_read_unaligned(&self.mmap[offset..offset + finfo_size]);
             finfos.push(finfo);
         }
         finfos
@@ -108,7 +114,8 @@ impl SpfReader {
         // 计算数据区结束位置
         let header_size = std::mem::size_of::<SpfHeader>();
         let version_size = std::mem::size_of::<SpfVersion>();
-        let data_area_end = total_len - version_size - header_size - self.header.header_size as usize;
+        let data_area_end =
+            total_len - version_size - header_size - self.header.header_size as usize;
 
         for (i, finfo) in finfos.iter().enumerate() {
             // 检查偏移量和大小
@@ -118,26 +125,47 @@ impl SpfReader {
 
             // 检查偏移量是否为负数（通过 i32 检查）
             if finfo.offset < 0 {
-                issues.push(format!("File #{} '{}': negative offset {}", i, finfo.file_name_str(), finfo.offset));
+                issues.push(format!(
+                    "File #{} '{}': negative offset {}",
+                    i,
+                    finfo.file_name_str(),
+                    finfo.offset
+                ));
                 continue;
             }
 
             // 检查大小是否为负数
             if finfo.size < 0 {
-                issues.push(format!("File #{} '{}': negative size {}", i, finfo.file_name_str(), finfo.size));
+                issues.push(format!(
+                    "File #{} '{}': negative size {}",
+                    i,
+                    finfo.file_name_str(),
+                    finfo.size
+                ));
                 continue;
             }
 
             // 检查是否超出数据区
             if end > data_area_end {
-                issues.push(format!("File #{} '{}': data range {}-{} exceeds data area (0-{})",
-                    i, finfo.file_name_str(), start, end, data_area_end));
+                issues.push(format!(
+                    "File #{} '{}': data range {}-{} exceeds data area (0-{})",
+                    i,
+                    finfo.file_name_str(),
+                    start,
+                    end,
+                    data_area_end
+                ));
             }
 
             // 检查 RESID 的 FILE_ID 是否与 SPF 头一致
             if finfo.res_id.file_id() as i32 != self.header.file_id {
-                issues.push(format!("File #{} '{}': RESID FILE_ID {} doesn't match SPF FILE_ID {}",
-                    i, finfo.file_name_str(), finfo.res_id.file_id(), self.header.file_id));
+                issues.push(format!(
+                    "File #{} '{}': RESID FILE_ID {} doesn't match SPF FILE_ID {}",
+                    i,
+                    finfo.file_name_str(),
+                    finfo.res_id.file_id(),
+                    self.header.file_id
+                ));
             }
 
             // 检查文件名是否为空

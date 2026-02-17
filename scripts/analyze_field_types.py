@@ -6,9 +6,20 @@
 """
 
 import csv
-import os
 from collections import Counter
 from pathlib import Path
+
+# LDT 格式支持的所有字段类型（按 CSV 类型名称）
+ALL_FIELD_TYPES = [
+    'int32',    # Num
+    'int64',    # Num64
+    'float32',  # Per
+    'string',   # String
+    'alias',    # Alias
+    'bool',     # TF
+    'fid',      # FID
+    'na',       # NA
+]
 
 
 def get_field_type(header: str) -> str:
@@ -59,6 +70,13 @@ def analyze_csv_files(csv_dir: Path) -> tuple[Counter, Counter, int]:
         except Exception as e:
             print(f"  警告: 读取 {csv_file.name} 失败: {e}")
 
+    # 确保所有已知类型都在计数器中（未出现的为 0）
+    for t in ALL_FIELD_TYPES:
+        if t not in type_counter:
+            type_counter[t] = 0
+        if t not in file_type_counter:
+            file_type_counter[t] = 0
+
     return type_counter, file_type_counter, total_fields
 
 
@@ -74,45 +92,40 @@ def main():
     # 分析文件
     type_counter, file_type_counter, total_fields = analyze_csv_files(csv_dir)
 
-    # 输出结果
+    # 输出结果 - 按 ALL_FIELD_TYPES 定义的顺序显示
     print("=" * 60)
-    print("字段类型统计 (按出现次数排序)")
+    print("字段类型统计")
     print("=" * 60)
-    print(f"{'类型':<12} {'出现次数':>10} {'占比':>10} {'涉及文件数':>12}")
+    print(f"{'类型':<12} {'出现次数':>10} {'占比':>10} {'涉及文件数':>12} {'状态':<8}")
     print("-" * 60)
 
-    for field_type, count in type_counter.most_common():
-        percentage = (count / total_fields) * 100
+    for field_type in ALL_FIELD_TYPES:
+        count = type_counter[field_type]
         file_count = file_type_counter[field_type]
-        print(f"{field_type:<12} {count:>10} {percentage:>9.2f}% {file_count:>12}")
+        percentage = (count / total_fields) * 100 if total_fields > 0 else 0
+        status = "✓ 使用" if count > 0 else "✗ 未用"
+        print(f"{field_type:<12} {count:>10} {percentage:>9.2f}% {file_count:>12} {status:<8}")
+
+    # 检查是否有未知类型
+    unknown_types = set(type_counter.keys()) - set(ALL_FIELD_TYPES)
+    for field_type in sorted(unknown_types):
+        count = type_counter[field_type]
+        file_count = file_type_counter[field_type]
+        percentage = (count / total_fields) * 100 if total_fields > 0 else 0
+        print(f"{field_type:<12} {count:>10} {percentage:>9.2f}% {file_count:>12} {'? 未知':<8}")
 
     print("-" * 60)
     print(f"{'总计':<12} {total_fields:>10}")
     print()
 
-    # 类型分类统计
+    # 使用统计
     print("=" * 60)
-    print("类型分类")
+    print("使用情况汇总")
     print("=" * 60)
-
-    # 按类型分组
-    numeric_types = {'int32', 'int64'}
-    float_types = {'float32'}
-    string_types = {'string', 'alias'}
-    special_types = {'fid', 'bool', 'na'}
-
-    categories = [
-        ('整数类型 (int32, int64)', numeric_types),
-        ('浮点类型 (float32)', float_types),
-        ('字符串类型 (string, alias)', string_types),
-        ('特殊类型 (fid, bool, na)', special_types),
-    ]
-
-    for name, types in categories:
-        count = sum(type_counter[t] for t in types if t in type_counter)
-        pct = (count / total_fields) * 100 if total_fields > 0 else 0
-        print(f"{name}: {count} ({pct:.1f}%)")
-
+    used_types = [t for t in ALL_FIELD_TYPES if type_counter[t] > 0]
+    unused_types = [t for t in ALL_FIELD_TYPES if type_counter[t] == 0]
+    print(f"已使用类型 ({len(used_types)}): {', '.join(used_types)}")
+    print(f"未使用类型 ({len(unused_types)}): {', '.join(unused_types)}")
     print()
 
     return 0

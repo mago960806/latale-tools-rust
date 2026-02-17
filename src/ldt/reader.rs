@@ -2,7 +2,7 @@
 //!
 //! This module provides zero-copy reading of LDT database files using memory mapping.
 
-use crate::ldt::{LdtHeader, FieldDef, FieldValue, FieldType, Row, HEADER_SIZE, MAX_FIELDS};
+use crate::ldt::{FieldDef, FieldType, FieldValue, LdtHeader, Row, HEADER_SIZE, MAX_FIELDS};
 use anyhow::{bail, Context, Result};
 use memmap2::Mmap;
 use std::fs::File;
@@ -26,7 +26,11 @@ impl LdtReader {
 
         let len = mmap.len();
         if len < HEADER_SIZE {
-            bail!("LDT file too small: {} bytes (minimum: {})", len, HEADER_SIZE);
+            bail!(
+                "LDT file too small: {} bytes (minimum: {})",
+                len,
+                HEADER_SIZE
+            );
         }
 
         // Read header from the beginning
@@ -96,7 +100,10 @@ impl LdtReader {
 
         // Read primary key (4 bytes, stored as i64 in Row struct)
         if pos + 4 > self.mmap.len() {
-            bail!("Unexpected end of file while reading primary key at offset {}", pos);
+            bail!(
+                "Unexpected end of file while reading primary key at offset {}",
+                pos
+            );
         }
         let primary_key: i32 = bytemuck::pod_read_unaligned(&self.mmap[pos..pos + 4]);
         pos += 4;
@@ -110,18 +117,31 @@ impl LdtReader {
             pos = new_pos;
         }
 
-        Ok((Row { primary_key, values }, pos))
+        Ok((
+            Row {
+                primary_key,
+                values,
+            },
+            pos,
+        ))
     }
 
     /// Read a single field value starting at the given offset
     /// Returns (FieldValue, next_offset)
-    fn read_field_value(&self, offset: usize, field_type: FieldType) -> Result<(FieldValue, usize)> {
+    fn read_field_value(
+        &self,
+        offset: usize,
+        field_type: FieldType,
+    ) -> Result<(FieldValue, usize)> {
         match field_type {
             FieldType::NA => Ok((FieldValue::NA, offset)),
 
             FieldType::Num => {
                 if offset + 4 > self.mmap.len() {
-                    bail!("Unexpected end of file while reading Num at offset {}", offset);
+                    bail!(
+                        "Unexpected end of file while reading Num at offset {}",
+                        offset
+                    );
                 }
                 let value: i32 = bytemuck::pod_read_unaligned(&self.mmap[offset..offset + 4]);
                 Ok((FieldValue::Num(value), offset + 4))
@@ -129,7 +149,10 @@ impl LdtReader {
 
             FieldType::Per => {
                 if offset + 4 > self.mmap.len() {
-                    bail!("Unexpected end of file while reading Per at offset {}", offset);
+                    bail!(
+                        "Unexpected end of file while reading Per at offset {}",
+                        offset
+                    );
                 }
                 let value: f32 = bytemuck::pod_read_unaligned(&self.mmap[offset..offset + 4]);
                 Ok((FieldValue::Per(value), offset + 4))
@@ -137,7 +160,10 @@ impl LdtReader {
 
             FieldType::TF => {
                 if offset + 4 > self.mmap.len() {
-                    bail!("Unexpected end of file while reading TF at offset {}", offset);
+                    bail!(
+                        "Unexpected end of file while reading TF at offset {}",
+                        offset
+                    );
                 }
                 let value: i32 = bytemuck::pod_read_unaligned(&self.mmap[offset..offset + 4]);
                 Ok((FieldValue::TF(value != 0), offset + 4))
@@ -145,7 +171,10 @@ impl LdtReader {
 
             FieldType::Num64 => {
                 if offset + 8 > self.mmap.len() {
-                    bail!("Unexpected end of file while reading Num64 at offset {}", offset);
+                    bail!(
+                        "Unexpected end of file while reading Num64 at offset {}",
+                        offset
+                    );
                 }
                 let value: i64 = bytemuck::pod_read_unaligned(&self.mmap[offset..offset + 8]);
                 Ok((FieldValue::Num64(value), offset + 8))
@@ -154,14 +183,20 @@ impl LdtReader {
             FieldType::String | FieldType::Alias | FieldType::FID => {
                 // Variable-length fields: 2-byte length prefix + data (no terminator)
                 if offset + 2 > self.mmap.len() {
-                    bail!("Unexpected end of file while reading string length at offset {}", offset);
+                    bail!(
+                        "Unexpected end of file while reading string length at offset {}",
+                        offset
+                    );
                 }
                 let len: u16 = bytemuck::pod_read_unaligned(&self.mmap[offset..offset + 2]);
                 let len = len as usize;
                 let data_start = offset + 2;
 
                 if data_start + len > self.mmap.len() {
-                    bail!("Unexpected end of file while reading string data at offset {}", data_start);
+                    bail!(
+                        "Unexpected end of file while reading string data at offset {}",
+                        data_start
+                    );
                 }
 
                 let data = &self.mmap[data_start..data_start + len];
