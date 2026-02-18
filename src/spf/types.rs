@@ -110,18 +110,6 @@ impl FInfo {
     }
 }
 
-/// 根据编码名称获取编码
-pub fn encoding_from_name(name: &str) -> &'static encoding_rs::Encoding {
-    match name.to_uppercase().as_str() {
-        "UTF-8" | "UTF8" => encoding_rs::UTF_8,
-        "BIG5" | "BIG-5" => encoding_rs::BIG5,
-        "EUC-KR" | "EUCKR" | "KOREAN" => encoding_rs::EUC_KR,
-        "GBK" | "GB2312" | "GB18030" => encoding_rs::GBK,
-        "SHIFT_JIS" | "SHIFTJIS" | "SJIS" | "CP932" | "JAPANESE" => encoding_rs::SHIFT_JIS,
-        _ => encoding_rs::UTF_8,
-    }
-}
-
 /// SPF 文件头（136 字节）
 #[derive(Clone, Copy, Zeroable, Pod)]
 #[repr(C)]

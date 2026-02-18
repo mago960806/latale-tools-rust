@@ -1,4 +1,4 @@
-use crate::spf::types::encoding_from_name;
+use crate::common::encoding_from_name;
 use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, DESC_SIZE};
 use anyhow::{bail, Context, Result};
 use std::fs::File;

@@ -1,4 +1,4 @@
-use crate::spf::types::encoding_from_name;
+use crate::common::encoding_from_name;
 use crate::spf::{FInfo, SpfHeader, SpfRegistry, SpfVersion};
 use anyhow::{bail, Context, Result};
 use memmap2::Mmap;
