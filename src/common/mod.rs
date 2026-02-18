@@ -1,4 +1,8 @@
-//! Common constants used across the project
+//! Common utilities used across the project
+
+mod encoding;
+
+pub use encoding::{encoding_from_name, DEFAULT_ENCODING};
 
 // ============================================================================
 // Display constants
