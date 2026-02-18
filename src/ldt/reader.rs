@@ -12,11 +12,12 @@ use std::path::Path;
 pub struct LdtReader {
     mmap: Mmap,
     header: LdtHeader,
+    encoding: &'static encoding_rs::Encoding,
 }
 
 impl LdtReader {
     /// Open an LDT file and map it to memory
-    pub fn open(path: &Path) -> Result<Self> {
+    pub fn open(path: &Path, encoding: &'static encoding_rs::Encoding) -> Result<Self> {
         let file = File::open(path)
             .with_context(|| format!("Failed to open LDT file: {}", path.display()))?;
 
@@ -44,7 +45,12 @@ impl LdtReader {
             bail!("Invalid row count: {}", header.num_rows);
         }
 
-        Ok(Self { mmap, header })
+        Ok(Self { mmap, header, encoding })
+    }
+
+    /// Get the encoding used by this reader
+    pub fn encoding(&self) -> &'static encoding_rs::Encoding {
+        self.encoding
     }
 
     /// Get the LDT header
@@ -200,8 +206,8 @@ impl LdtReader {
                 }
 
                 let data = &self.mmap[data_start..data_start + len];
-                // Decode as GBK (LaTale uses GBK encoding for strings)
-                let (s, _, _) = encoding_rs::GBK.decode(data);
+                // Decode using the configured encoding
+                let (s, _, _) = self.encoding.decode(data);
                 let s = s.into_owned();
                 let new_offset = data_start + len;
 
