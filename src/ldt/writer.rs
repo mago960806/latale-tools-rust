@@ -16,16 +16,23 @@ pub struct LdtWriter {
     db_id: i32,
     field_defs: Vec<FieldDef>,
     rows: Vec<Row>,
+    encoding: &'static encoding_rs::Encoding,
 }
 
 impl LdtWriter {
-    /// Create a new LDT writer with the given database ID
-    pub fn new(db_id: i32) -> Self {
+    /// Create a new LDT writer with the given database ID and encoding
+    pub fn new(db_id: i32, encoding: &'static encoding_rs::Encoding) -> Self {
         Self {
             db_id,
             field_defs: Vec::new(),
             rows: Vec::new(),
+            encoding,
         }
+    }
+
+    /// Get the encoding used by this writer
+    pub fn encoding(&self) -> &'static encoding_rs::Encoding {
+        self.encoding
     }
 
     /// Add a field definition
@@ -187,26 +194,25 @@ impl LdtWriter {
             }
 
             FieldValue::String(s) => {
-                Self::write_gbk_string(writer, s)?;
+                self.write_encoded_string(writer, s)?;
             }
 
             FieldValue::Alias(s) => {
-                Self::write_gbk_string(writer, s)?;
+                self.write_encoded_string(writer, s)?;
             }
 
             FieldValue::FID(spf_id, row_id) => {
                 let s = format!("{},{}", spf_id, row_id);
-                Self::write_gbk_string(writer, &s)?;
+                self.write_encoded_string(writer, &s)?;
             }
         }
 
         Ok(())
     }
 
-    /// Write a GBK-encoded string with length prefix
-    fn write_gbk_string<W: Write>(writer: &mut W, s: &str) -> Result<()> {
-        // Encode as GBK (LaTale uses GBK encoding for strings)
-        let (bytes, _, _) = encoding_rs::GBK.encode(s);
+    /// Write an encoded string with length prefix
+    fn write_encoded_string<W: Write>(&self, writer: &mut W, s: &str) -> Result<()> {
+        let (bytes, _, _) = self.encoding.encode(s);
         let bytes = bytes.as_ref();
         // Write length + content (no terminator)
         writer.write_all(&(bytes.len() as u16).to_le_bytes())?;
@@ -221,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_writer_basic() {
-        let mut writer = LdtWriter::new(1);
+        let mut writer = LdtWriter::new(1, encoding_rs::GBK);
         writer.add_field("ID", FieldType::Num64);
         writer.add_field("Name", FieldType::String);
         writer.add_field("Price", FieldType::Num);
