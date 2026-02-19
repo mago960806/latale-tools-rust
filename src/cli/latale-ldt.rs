@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use latale_tools::common::{GB, KB, MB, MILLIS_PER_SECOND, SEPARATOR_WIDTH};
+use latale_tools::common::{encoding_from_name, GB, KB, MB, MILLIS_PER_SECOND, SEPARATOR_WIDTH, DEFAULT_ENCODING};
 use latale_tools::ldt::{
     export_to_csv, import_from_csv, LdtReader, LdtWriter, CSV_EXTENSION, CSV_OUTPUT_EXT,
     DEFAULT_CSV_DIR, DEFAULT_LDT_DIR, LDT_EXTENSION, LDT_OUTPUT_EXT,
@@ -61,6 +61,9 @@ enum Commands {
         /// 显示前 N 行数据
         #[arg(short, long, default_value = "5")]
         rows: usize,
+        /// 文件名编码 (GBK, BIG5, EUC-KR, SHIFT_JIS, UTF-8)
+        #[arg(long, default_value = "GBK")]
+        encoding: String,
     },
 
     /// 双向转换：LDT ↔ CSV（支持单文件和目录批量）
@@ -77,8 +80,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Info { ldt_file, rows } => {
-            cmd_info(&ldt_file, rows)?;
+        Commands::Info { ldt_file, rows, encoding } => {
+            cmd_info(&ldt_file, rows, &encoding)?;
         }
         Commands::Convert { input, output } => {
             let input = input.as_deref();
@@ -89,8 +92,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn cmd_info(ldt_file: &std::path::Path, preview_rows: usize) -> Result<()> {
-    let reader = LdtReader::open(ldt_file)
+fn cmd_info(ldt_file: &std::path::Path, preview_rows: usize, encoding_name: &str) -> Result<()> {
+    let encoding = encoding_from_name(encoding_name);
+
+    let reader = LdtReader::open(ldt_file, encoding)
         .with_context(|| format!("无法打开 LDT 文件: {}", ldt_file.display()))?;
 
     let field_defs = reader.field_defs();
@@ -108,6 +113,7 @@ fn cmd_info(ldt_file: &std::path::Path, preview_rows: usize) -> Result<()> {
     println!("字段数量:    {}", reader.field_count());
     println!("数据行数:    {}", reader.row_count());
     println!("文件大小:    {}", format_size(reader.total_size()));
+    println!("文件编码:    {}", encoding_name);
 
     // 显示字段定义
     println!();
@@ -360,8 +366,9 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
 fn convert_ldt_to_csv(input: &Path, output_path: &Path, silent: bool) -> Result<()> {
     let start = Instant::now();
 
-    // 读取 LDT
-    let reader = LdtReader::open(input)
+    // 读取 LDT (使用默认编码)
+    let encoding = encoding_from_name(DEFAULT_ENCODING);
+    let reader = LdtReader::open(input, encoding)
         .with_context(|| format!("无法打开 LDT 文件: {}", input.display()))?;
 
     let db_id = reader.db_id();
@@ -417,8 +424,9 @@ fn convert_csv_to_ldt(input: &Path, output_path: &Path, silent: bool) -> Result<
             .with_context(|| format!("无法创建输出目录: {}", parent.display()))?;
     }
 
-    // 写入 LDT
-    let mut writer = LdtWriter::new(db_id);
+    // 写入 LDT (使用默认编码)
+    let encoding = encoding_from_name(DEFAULT_ENCODING);
+    let mut writer = LdtWriter::new(db_id, encoding);
     writer.set_field_defs(&field_defs);
     writer.set_rows(&rows);
     writer.write(output_path).context("写入 LDT 文件失败")?;
