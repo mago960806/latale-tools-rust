@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use latale_tools::common::{encoding_from_name, GB, KB, MB, MILLIS_PER_SECOND, SEPARATOR_WIDTH, DEFAULT_ENCODING};
+use latale_tools::common::{encoding_from_name, GB, KB, MB, MILLIS_PER_SECOND, SEPARATOR_WIDTH};
 use latale_tools::ldt::{
     export_to_csv, import_from_csv, LdtReader, LdtWriter, CSV_EXTENSION, CSV_OUTPUT_EXT,
     DEFAULT_CSV_DIR, DEFAULT_LDT_DIR, LDT_EXTENSION, LDT_OUTPUT_EXT,
@@ -73,6 +73,9 @@ enum Commands {
         /// 输出路径
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// 文件名编码 (GBK, BIG5, EUC-KR, SHIFT_JIS, UTF-8)
+        #[arg(long, default_value = "GBK")]
+        encoding: String,
     },
 }
 
@@ -83,9 +86,9 @@ fn main() -> Result<()> {
         Commands::Info { ldt_file, rows, encoding } => {
             cmd_info(&ldt_file, rows, &encoding)?;
         }
-        Commands::Convert { input, output } => {
+        Commands::Convert { input, output, encoding } => {
             let input = input.as_deref();
-            cmd_convert(input, output.as_deref())?;
+            cmd_convert(input, output.as_deref(), &encoding)?;
         }
     }
 
@@ -172,7 +175,9 @@ fn cmd_info(ldt_file: &std::path::Path, preview_rows: usize, encoding_name: &str
     Ok(())
 }
 
-fn cmd_convert(input: Option<&std::path::Path>, output: Option<&std::path::Path>) -> Result<()> {
+fn cmd_convert(input: Option<&std::path::Path>, output: Option<&std::path::Path>, encoding_name: &str) -> Result<()> {
+    let encoding = encoding_from_name(encoding_name);
+
     let input = input.unwrap_or_else(|| std::path::Path::new(DEFAULT_LDT_DIR));
 
     if !input.exists() {
@@ -180,9 +185,9 @@ fn cmd_convert(input: Option<&std::path::Path>, output: Option<&std::path::Path>
     }
 
     if input.is_file() {
-        convert_single_file(input, output, false)
+        convert_single_file(input, output, false, encoding)
     } else if input.is_dir() {
-        convert_directory(input, output)
+        convert_directory(input, output, encoding, encoding_name)
     } else {
         bail!("输入路径不是文件或目录: {}", input.display())
     }
@@ -194,7 +199,8 @@ fn cmd_convert(input: Option<&std::path::Path>, output: Option<&std::path::Path>
 /// * `input` - 输入文件路径
 /// * `output` - 输出路径（可选），可以是文件或目录
 /// * `silent` - 是否静默模式（不打印进度信息）
-fn convert_single_file(input: &Path, output: Option<&Path>, silent: bool) -> Result<()> {
+/// * `encoding` - 文件名编码
+fn convert_single_file(input: &Path, output: Option<&Path>, silent: bool, encoding: &'static encoding_rs::Encoding) -> Result<()> {
     let input_ext = input
         .extension()
         .and_then(|e| e.to_str())
@@ -222,7 +228,7 @@ fn convert_single_file(input: &Path, output: Option<&Path>, silent: bool) -> Res
                 output_path
             };
 
-            convert_ldt_to_csv(input, &output_path, silent)?;
+            convert_ldt_to_csv(input, &output_path, silent, encoding)?;
         }
 
         ext if ext == CSV_EXTENSION => {
@@ -245,7 +251,7 @@ fn convert_single_file(input: &Path, output: Option<&Path>, silent: bool) -> Res
                 output_path
             };
 
-            convert_csv_to_ldt(input, &output_path, silent)?;
+            convert_csv_to_ldt(input, &output_path, silent, encoding)?;
         }
 
         _ => {
@@ -262,7 +268,7 @@ fn convert_single_file(input: &Path, output: Option<&Path>, silent: bool) -> Res
 }
 
 /// 转换目录
-fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
+fn convert_directory(input: &Path, output: Option<&Path>, encoding: &'static encoding_rs::Encoding, encoding_name: &str) -> Result<()> {
     // 统计文件类型
     let (ldt_files, csv_files) = count_files_by_type(input)?;
 
@@ -322,6 +328,7 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
     println!("输入目录:    {}", input.display());
     println!("输出目录:    {}", output_dir.display());
     println!("文件数量:    {}", files.len());
+    println!("文件编码:    {}", encoding_name);
     println!();
 
     let start = Instant::now();
@@ -332,7 +339,7 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
         let file_name = file.file_name().unwrap_or_default().to_string_lossy();
         print!("  [{}/{}] {} ... ", i + 1, files.len(), file_name);
 
-        match convert_single_file(file, Some(output_dir.as_path()), true) {
+        match convert_single_file(file, Some(output_dir.as_path()), true, encoding) {
             Ok(_) => {
                 println!("完成");
                 success_count += 1;
@@ -363,11 +370,11 @@ fn convert_directory(input: &Path, output: Option<&Path>) -> Result<()> {
 /// * `input` - 输入 LDT 文件路径
 /// * `output_path` - 输出 CSV 文件路径
 /// * `silent` - 是否静默模式（不打印进度信息）
-fn convert_ldt_to_csv(input: &Path, output_path: &Path, silent: bool) -> Result<()> {
+/// * `encoding` - 文件名编码
+fn convert_ldt_to_csv(input: &Path, output_path: &Path, silent: bool, encoding: &'static encoding_rs::Encoding) -> Result<()> {
     let start = Instant::now();
 
-    // 读取 LDT (使用默认编码)
-    let encoding = encoding_from_name(DEFAULT_ENCODING);
+    // 读取 LDT
     let reader = LdtReader::open(input, encoding)
         .with_context(|| format!("无法打开 LDT 文件: {}", input.display()))?;
 
@@ -410,7 +417,8 @@ fn convert_ldt_to_csv(input: &Path, output_path: &Path, silent: bool) -> Result<
 /// * `input` - 输入 CSV 文件路径
 /// * `output_path` - 输出 LDT 文件路径
 /// * `silent` - 是否静默模式（不打印进度信息）
-fn convert_csv_to_ldt(input: &Path, output_path: &Path, silent: bool) -> Result<()> {
+/// * `encoding` - 文件名编码
+fn convert_csv_to_ldt(input: &Path, output_path: &Path, silent: bool, encoding: &'static encoding_rs::Encoding) -> Result<()> {
     let start = Instant::now();
 
     // 读取 CSV
@@ -424,8 +432,7 @@ fn convert_csv_to_ldt(input: &Path, output_path: &Path, silent: bool) -> Result<
             .with_context(|| format!("无法创建输出目录: {}", parent.display()))?;
     }
 
-    // 写入 LDT (使用默认编码)
-    let encoding = encoding_from_name(DEFAULT_ENCODING);
+    // 写入 LDT
     let mut writer = LdtWriter::new(db_id, encoding);
     writer.set_field_defs(&field_defs);
     writer.set_rows(&rows);
