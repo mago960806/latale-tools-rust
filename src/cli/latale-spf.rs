@@ -101,6 +101,9 @@ enum Commands {
         /// 文件名编码（默认从注册表获取）
         #[arg(long)]
         encoding: Option<String>,
+        /// 使用新版 ChaCha20 加密资源和索引（默认不加密）
+        #[arg(long)]
+        encrypt: bool,
         /// 仅模拟运行，不实际写入文件
         #[arg(long)]
         dry_run: bool,
@@ -130,6 +133,7 @@ fn main() -> Result<()> {
             data_dir,
             version,
             encoding,
+            encrypt,
             dry_run,
         } => {
             cmd_pack(
@@ -138,6 +142,7 @@ fn main() -> Result<()> {
                 data_dir.as_deref(),
                 version,
                 encoding.as_deref(),
+                encrypt,
                 dry_run,
             )?;
         }
@@ -156,6 +161,14 @@ fn cmd_info(spf_file: &std::path::Path, list: bool) -> Result<()> {
     print_section_header("文件信息", spf_file.display());
 
     println!("版本号:      {}", reader.version());
+    println!(
+        "加密状态:    {}",
+        if reader.is_encrypted() {
+            "已加密"
+        } else {
+            "未加密"
+        }
+    );
     println!("文件编号:    {} (0x{:02X})", header.file_id, header.file_id);
 
     if let Some(reg) = registry {
@@ -183,7 +196,7 @@ fn cmd_info(spf_file: &std::path::Path, list: bool) -> Result<()> {
 
         for (i, finfo) in finfos.iter().enumerate() {
             println!(
-                "  [{:5}] {:<48} {:>8}  RESID=0x{:08X} (file_id={}, instance_id={})",
+                "  [{:5}] {:<48} {:>10}  RESID=0x{:08X} (file_id={}, instance_id={})",
                 i + 1,
                 finfo.file_name_str_with_encoding(reader.encoding()),
                 format_size(finfo.size as usize),
@@ -213,6 +226,14 @@ fn cmd_verify(spf_file: &std::path::Path) -> Result<()> {
         println!("文件名编码:  {}", reg.encoding);
     }
     println!("文件数量:    {}", reader.file_count());
+    println!(
+        "加密状态:    {}",
+        if reader.is_encrypted() {
+            "已加密（自动解密索引后验证）"
+        } else {
+            "未加密"
+        }
+    );
 
     let result = reader.verify();
 
@@ -253,6 +274,14 @@ fn cmd_unpack(
     let registry = SpfRegistry::find_by_file_id(header.file_id as u8);
 
     println!("版本号:      {}", reader.version());
+    println!(
+        "加密状态:    {}",
+        if reader.is_encrypted() {
+            "已加密（解包时自动解密）"
+        } else {
+            "未加密"
+        }
+    );
     println!("文件编号:    {}", header.file_id);
     if let Some(reg) = registry {
         println!("注册名称:    {}", reg.name);
@@ -313,6 +342,7 @@ fn cmd_pack(
     data_dir: Option<&std::path::Path>,
     version: Option<i32>,
     encoding: Option<&str>,
+    encrypt: bool,
     dry_run: bool,
 ) -> Result<()> {
     let registry = SpfRegistry::find_by_name(spf_name)
@@ -332,6 +362,7 @@ fn cmd_pack(
         registry.file_id, registry.file_id
     );
     println!("版本号:      {}", version.unwrap_or(registry.version));
+    println!("加密状态:    {}", if encrypt { "已加密" } else { "未加密" });
     println!("文件名编码:  {}", encoding);
     println!("包含目录:    {}", registry.include_dirs.join(", "));
 
@@ -340,6 +371,7 @@ fn cmd_pack(
         version.unwrap_or(registry.version),
         encoding,
     );
+    writer.set_encrypted(encrypt);
 
     for dir in registry.include_dirs {
         println!("源目录:      {}/{}", data_dir.display(), dir);

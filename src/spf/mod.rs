@@ -1,3 +1,4 @@
+mod crypto;
 pub mod reader;
 pub mod registry;
 pub mod types;

@@ -1,7 +1,10 @@
 use crate::common::encoding_from_name;
-use crate::spf::{FInfo, SpfHeader, SpfRegistry, SpfVersion};
+use crate::spf::{
+    crypto, FInfo, SpfHeader, SpfRegistry, SpfVersion, FINFO_SIZE, SPF_ENCRYPTED_FLAG,
+};
 use anyhow::{bail, Context, Result};
 use memmap2::Mmap;
+use std::borrow::Cow;
 use std::fs::File;
 use std::path::Path;
 
@@ -10,6 +13,9 @@ pub struct SpfReader {
     mmap: Mmap,
     header: SpfHeader,
     version: SpfVersion,
+    /// 磁盘上的原始版本值（资源解密必须保留加密标志位）
+    raw_version: u32,
+    encrypted: bool,
     /// 文件名编码
     encoding: Option<&'static encoding_rs::Encoding>,
 }
@@ -32,7 +38,13 @@ impl SpfReader {
 
         // 从文件末尾读取版本号（最后 4 字节）
         let version_offset = len - std::mem::size_of::<SpfVersion>();
-        let version: SpfVersion = bytemuck::pod_read_unaligned(&mmap[version_offset..len]);
+        let raw_version = u32::from_le_bytes(
+            mmap[version_offset..len]
+                .try_into()
+                .expect("version slice has exactly four bytes"),
+        );
+        let encrypted = raw_version & SPF_ENCRYPTED_FLAG != 0;
+        let version = (raw_version & !SPF_ENCRYPTED_FLAG) as SpfVersion;
 
         // 读取 SPF 头（版本号前 136 字节）
         let header_offset = version_offset - std::mem::size_of::<SpfHeader>();
@@ -47,6 +59,8 @@ impl SpfReader {
             mmap,
             header,
             version,
+            raw_version,
+            encrypted,
             encoding,
         })
     }
@@ -54,6 +68,11 @@ impl SpfReader {
     /// 获取 SPF 版本号
     pub fn version(&self) -> SpfVersion {
         self.version
+    }
+
+    /// 返回 SPF 是否带有新版加密标志。
+    pub fn is_encrypted(&self) -> bool {
+        self.encrypted
     }
 
     /// 获取 SPF 文件头
@@ -90,18 +109,30 @@ impl SpfReader {
         let mut finfos = Vec::with_capacity(count);
         for i in 0..count {
             let offset = index_start + i * finfo_size;
-            let finfo: FInfo =
-                bytemuck::pod_read_unaligned(&self.mmap[offset..offset + finfo_size]);
+            let mut bytes = [0u8; FINFO_SIZE];
+            bytes.copy_from_slice(&self.mmap[offset..offset + finfo_size]);
+            if self.encrypted {
+                crypto::crypt_finfo(&mut bytes);
+            }
+            let finfo: FInfo = bytemuck::pod_read_unaligned(&bytes);
             finfos.push(finfo);
         }
         finfos
     }
 
-    /// 获取指定文件的原始数据（零拷贝）
-    pub fn get_file_data(&self, finfo: &FInfo) -> &[u8] {
+    /// 获取指定文件的明文数据；未加密 SPF 保持零拷贝。
+    pub fn get_file_data<'a>(&'a self, finfo: &FInfo) -> Cow<'a, [u8]> {
         let start = finfo.offset as usize;
         let end = start + finfo.size as usize;
-        &self.mmap[start..end]
+        let data = &self.mmap[start..end];
+
+        if self.encrypted {
+            let mut decrypted = data.to_vec();
+            crypto::crypt_resource(&mut decrypted, finfo.offset, finfo.size, self.raw_version);
+            Cow::Owned(decrypted)
+        } else {
+            Cow::Borrowed(data)
+        }
     }
 
     /// 验证 SPF 文件完整性
@@ -200,7 +231,7 @@ impl SpfReader {
             let data = self.get_file_data(finfo);
             let mut file = fs::File::create(&output_path)
                 .with_context(|| format!("Failed to create file: {}", output_path.display()))?;
-            file.write_all(data)
+            file.write_all(data.as_ref())
                 .with_context(|| format!("Failed to write file: {}", output_path.display()))?;
 
             // 调用回调

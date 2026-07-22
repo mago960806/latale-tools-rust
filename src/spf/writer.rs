@@ -1,5 +1,7 @@
 use crate::common::encoding_from_name;
-use crate::spf::{FInfo, ResId, SpfHeader, SpfVersion, DESC_SIZE};
+use crate::spf::{
+    crypto, FInfo, ResId, SpfHeader, SpfVersion, DESC_SIZE, FINFO_SIZE, SPF_ENCRYPTED_FLAG,
+};
 use anyhow::{bail, Context, Result};
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -9,6 +11,7 @@ use std::path::Path;
 pub struct SpfWriter {
     file_id: u8,
     version: SpfVersion,
+    encrypted: bool,
     desc: [u8; DESC_SIZE],
     /// 文件名编码
     encoding: &'static encoding_rs::Encoding,
@@ -25,10 +28,16 @@ impl SpfWriter {
         Self {
             file_id,
             version,
+            encrypted: false,
             desc: [0u8; DESC_SIZE],
             encoding: encoding_from_name(encoding),
             files: Vec::new(),
         }
+    }
+
+    /// 设置是否写出新版 ChaCha20 加密 SPF；默认不加密。
+    pub fn set_encrypted(&mut self, encrypted: bool) {
+        self.encrypted = encrypted;
     }
 
     /// 设置描述信息
@@ -95,6 +104,10 @@ impl SpfWriter {
     /// 写入 SPF 文件
     /// callback: 可选回调函数 (current, total, filename)，用于显示进度
     pub fn write(&self, output_path: &Path, callback: super::ProgressCallback) -> Result<()> {
+        if self.version < 0 {
+            bail!("SPF version must be non-negative: {}", self.version);
+        }
+
         let file = File::create(output_path)
             .with_context(|| format!("Failed to create: {}", output_path.display()))?;
         let mut writer = BufWriter::new(file);
@@ -102,6 +115,12 @@ impl SpfWriter {
         let finfo_size = std::mem::size_of::<FInfo>();
         let file_count = self.files.len();
         let header_size = (file_count * finfo_size) as i32;
+        let raw_version = self.version as u32
+            | if self.encrypted {
+                SPF_ENCRYPTED_FLAG
+            } else {
+                0
+            };
 
         // 1. 写入文件数据区，同时计算偏移量
         let mut finfos: Vec<FInfo> = Vec::with_capacity(file_count);
@@ -130,9 +149,17 @@ impl SpfWriter {
             finfos.push(finfo);
 
             // 写入数据
-            writer
-                .write_all(data)
-                .context("Failed to write file data")?;
+            if self.encrypted {
+                let mut encrypted_data = data.clone();
+                crypto::crypt_resource(&mut encrypted_data, finfo.offset, finfo.size, raw_version);
+                writer
+                    .write_all(&encrypted_data)
+                    .context("Failed to write encrypted file data")?;
+            } else {
+                writer
+                    .write_all(data)
+                    .context("Failed to write file data")?;
+            }
             current_offset += data.len() as i32;
 
             // 调用回调
@@ -143,8 +170,18 @@ impl SpfWriter {
 
         // 2. 写入 FINFO 索引表
         for finfo in &finfos {
-            let bytes: &[u8] = bytemuck::bytes_of(finfo);
-            writer.write_all(bytes).context("Failed to write FINFO")?;
+            if self.encrypted {
+                let mut bytes = [0u8; FINFO_SIZE];
+                bytes.copy_from_slice(bytemuck::bytes_of(finfo));
+                crypto::crypt_finfo(&mut bytes);
+                writer
+                    .write_all(&bytes)
+                    .context("Failed to write encrypted FINFO")?;
+            } else {
+                writer
+                    .write_all(bytemuck::bytes_of(finfo))
+                    .context("Failed to write FINFO")?;
+            }
         }
 
         // 3. 写入 SPF 头
@@ -160,10 +197,54 @@ impl SpfWriter {
 
         // 4. 写入版本号
         writer
-            .write_all(&self.version.to_le_bytes())
+            .write_all(&raw_version.to_le_bytes())
             .context("Failed to write version")?;
 
         writer.flush().context("Failed to flush")?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::spf::SpfReader;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn reader_writer_roundtrip_supports_plain_and_encrypted_spf() -> Result<()> {
+        for encrypted in [false, true] {
+            let unique = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock should be after UNIX epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "latale-spf-roundtrip-{}-{unique}.SPF",
+                if encrypted { "encrypted" } else { "plain" }
+            ));
+
+            let mut writer = SpfWriter::new(3, 2_026_071_602, "GBK");
+            writer.set_encrypted(encrypted);
+            writer.add_file("DATA/LDT/FIRST.LDT".to_owned(), b"first resource".to_vec());
+            writer.add_file("DATA/LDT/SECOND.LDT".to_owned(), (0..=255).collect());
+            writer.write(&path, None)?;
+
+            let reader = SpfReader::open(&path)?;
+            assert_eq!(reader.version(), 2_026_071_602);
+            assert_eq!(reader.is_encrypted(), encrypted);
+            assert!(reader.verify()?.is_empty());
+
+            let finfos = reader.file_infos();
+            assert_eq!(finfos.len(), 2);
+            assert_eq!(reader.get_file_data(&finfos[0]).as_ref(), b"first resource");
+            assert_eq!(
+                reader.get_file_data(&finfos[1]).as_ref(),
+                &(0..=255).collect::<Vec<_>>()
+            );
+
+            std::fs::remove_file(path)?;
+        }
 
         Ok(())
     }

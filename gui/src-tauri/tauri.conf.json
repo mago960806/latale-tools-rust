@@ -1,0 +1,63 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LaTale Tools",
+  "version": "0.0.1",
+  "identifier": "com.latale.tools",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "LaTale Tools",
+        "width": 1080,
+        "height": 680,
+        "minWidth": 1080,
+        "minHeight": 680,
+        "maxWidth": 1080,
+        "maxHeight": 680,
+        "resizable": false,
+        "maximizable": false,
+        "fullscreen": false,
+        "center": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "shortDescription": "LaTale 游戏资源查看、转换与打包工具",
+    "longDescription": "查看、转换和打包 SPF、LDT 与 STG 文件。",
+    "fileAssociations": [
+      {
+        "ext": ["spf"],
+        "name": "LaTaleSPF",
+        "description": "LaTale SPF Resource Package"
+      },
+      {
+        "ext": ["ldt"],
+        "name": "LaTaleLDT",
+        "description": "LaTale LDT Data Table"
+      },
+      {
+        "ext": ["stg"],
+        "name": "LaTaleSTG",
+        "description": "LaTale Stage Data"
+      }
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "./windows/installer-hooks.nsh",
+        "languages": ["SimpChinese", "English"]
+      }
+    }
+  }
+}

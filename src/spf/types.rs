@@ -28,6 +28,9 @@ pub const INSTANCE_ID_START: u32 = 1;
 /// SPF file extension
 pub const SPF_EXTENSION: &str = ".SPF";
 
+/// Encryption flag stored in the highest bit of the on-disk SPF version
+pub const SPF_ENCRYPTED_FLAG: u32 = 0x8000_0000;
+
 // ============================================================================
 // Types
 // ============================================================================

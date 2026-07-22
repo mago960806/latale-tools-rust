@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GUI: 启动开发环境",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "tauri", "dev"],
+      "options": {
+        "cwd": "${workspaceFolder}/gui"
+      },
+      "problemMatcher": ["$rustc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "runOptions": {
+        "instanceLimit": 1
+      }
+    }
+  ]
+}
