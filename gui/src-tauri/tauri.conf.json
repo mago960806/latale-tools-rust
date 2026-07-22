@@ -32,6 +32,13 @@
   },
   "bundle": {
     "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "Utility",
     "shortDescription": "LaTale 游戏资源查看、转换与打包工具",
     "longDescription": "查看、转换和打包 SPF、LDT 与 STG 文件。",
