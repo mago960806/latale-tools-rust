@@ -7,7 +7,7 @@
 Windows 发布包中的文件名包含版本和平台，例如：
 
 ```text
-latale-ldt-0.0.2-windows-x64.exe
+latale-ldt-0.0.3-windows-x64.exe
 ```
 
 可以直接使用完整文件名，也可以将它改名为 `latale-ldt.exe`。以下示例使用改名后的文件名。

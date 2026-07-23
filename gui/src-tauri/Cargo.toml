@@ -1,6 +1,6 @@
 [package]
 name = "latale-tools-gui"
-version = "0.0.2"
+version = "0.0.3"
 description = "Desktop interface for LaTale resource tools"
 authors = ["LaTale Tools Contributors"]
 edition = "2021"

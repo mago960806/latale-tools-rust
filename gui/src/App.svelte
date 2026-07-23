@@ -431,7 +431,7 @@
         <Settings size={18} />
         <span>设置与关于</span>
       </button>
-      <div class="version">v0.0.2 · 桌面版</div>
+      <div class="version">v0.0.3 · 桌面版</div>
     </div>
   </aside>
 
@@ -667,7 +667,7 @@
         </div>
       {:else}
         <div class="settings-layout">
-          <div class="settings-card"><Wrench size={24} /><h3>LaTale Tools</h3><p>SPF、LDT 和 STG 资源工具。</p><div class="about-list"><span>版本<strong>0.0.2</strong></span><span>支持格式<strong>SPF / LDT / STG</strong></span><span>文件处理<strong>仅限本机</strong></span></div></div>
+          <div class="settings-card"><Wrench size={24} /><h3>LaTale Tools</h3><p>SPF、LDT 和 STG 资源工具。</p><div class="about-list"><span>版本<strong>0.0.3</strong></span><span>支持格式<strong>SPF / LDT / STG</strong></span><span>文件处理<strong>仅限本机</strong></span></div></div>
           <div class="settings-card"><Settings size={24} /><h3>默认行为</h3><label class="setting-row"><span>SPF 打包默认不加密</span><BadgeCheck size={18} /></label><label class="setting-row"><span>解包与 LDT 转换保存到输入文件同目录</span><BadgeCheck size={18} /></label><label class="setting-row"><span>拖入文件后自动选择工具</span><BadgeCheck size={18} /></label></div>
         </div>
       {/if}

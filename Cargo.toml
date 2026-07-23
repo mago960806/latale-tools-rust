@@ -1,6 +1,6 @@
 [package]
 name = "latale-tools"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["LaTale Tools Contributors"]
 description = "SPF file unpacker/packer for LaTale game resources"
