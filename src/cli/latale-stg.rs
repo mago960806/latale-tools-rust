@@ -254,7 +254,7 @@ fn print_stage_data(
             display_name(&stage.stage_name, &stage.palette_file)
         );
 
-        let group_take = group_limit.unwrap_or_else(|| stage.group_list.len());
+        let group_take = group_limit.unwrap_or(stage.group_list.len());
         for (group_index, group) in stage.group_list.iter().take(group_take).enumerate() {
             println!(
                 "    ├─ Group[{}] ID={} \"{}\"",
@@ -263,7 +263,7 @@ fn print_stage_data(
                 display_name(&group.group_name, &group.bg_file)
             );
 
-            let map_take = map_limit.unwrap_or_else(|| group.map_list.len());
+            let map_take = map_limit.unwrap_or(group.map_list.len());
             for (map_index, map) in group.map_list.iter().take(map_take).enumerate() {
                 println!(
                     "    │  └─ Map[{}] BGIndex={} \"{}\"",

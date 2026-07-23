@@ -60,7 +60,7 @@ npm run tauri build
 
 ### 使用 GitHub Actions 构建
 
-推送代码后，在 GitHub 仓库中打开 `Actions`，选择 `Build Windows GUI`，点击
+推送代码后，在 GitHub 仓库中打开 `Actions`，选择 `Build Windows Release`，点击
 `Run workflow`。构建完成后，在任务页面的 `Artifacts` 区域下载
 `latale-tools-windows-x64`。
 
@@ -71,8 +71,9 @@ git tag v0.0.2
 git push origin v0.0.2
 ```
 
-下载的构建产物包括独立 EXE、NSIS 安装程序和 MSI 安装包，文件名统一使用
-`latale-tools-<版本>-windows-x64.*`。安装后的主程序文件名为
+下载的构建产物包括桌面版独立 EXE、NSIS 安装程序、MSI 安装包，以及
+`latale-spf`、`latale-ldt`、`latale-stg` 三个 CLI 工具和对应使用说明。
+文件名统一使用小写字母和连字符。安装后的桌面程序文件名为
 `latale-tools.exe`；应用和安装界面仍显示为 “LaTale Tools”。
 
 ## 目录
