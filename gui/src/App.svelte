@@ -36,6 +36,7 @@
     X,
   } from "@lucide/svelte";
   import type {
+    DatabaseResult,
     LdtInfo,
     OpenRequest,
     OperationResult,
@@ -72,6 +73,7 @@
   let spfPath = "";
   let spfInfoData: SpfInfo | null = null;
   let spfSearch = "";
+  let spfDatabaseEncoding = "GBK";
 
   let ldtPath = "";
   let ldtEncoding = "GBK";
@@ -239,6 +241,24 @@
       invoke<OperationResult>("spf_unpack", { path: spfPath }),
     );
     if (result) successMessage = `${result.summary} · ${result.outputPath}`;
+  }
+
+  async function unpackSpfToSqlite() {
+    if (!spfPath || spfInfoData?.fileId !== 3) return;
+    const result = await withTask(() =>
+      invoke<DatabaseResult>("spf_unpack_to_sqlite", {
+        path: spfPath,
+        encoding: spfDatabaseEncoding,
+      }),
+    );
+    if (!result) return;
+
+    const summary = `已解包 ${result.extractedFiles} 个文件，写入 ${result.importedTables} 张表、${result.importedRows} 行`;
+    if (result.failures.length === 0) {
+      successMessage = `${summary} · ${result.outputPath}`;
+    } else {
+      errorMessage = `${summary}；${result.failures.length} 个文件失败：${result.failures.slice(0, 2).join("；")}`;
+    }
   }
 
   async function browseLdt(extensions = ["ldt", "LDT", "csv", "CSV"]) {
@@ -411,7 +431,7 @@
         <Settings size={18} />
         <span>设置与关于</span>
       </button>
-      <div class="version">v0.0.1 · 桌面版</div>
+      <div class="version">v0.0.2 · 桌面版</div>
     </div>
   </aside>
 
@@ -481,6 +501,14 @@
               <button class="button secondary" disabled={busy} onclick={verifySpf}><FileCheck2 size={17} />验证</button>
               <button class="button primary" disabled={busy} onclick={unpackSpf}><FolderInput size={17} />解包</button>
             </div>
+
+            {#if spfInfoData.fileId === 3}
+              <div class="database-action-row">
+                <div class="database-action-copy"><Database size={20} /><div><strong>生成 latale.db</strong><span>解包后导入包内 LDT，跳过 ID 为 0 的行</span></div></div>
+                <select class="compact-select encoding-select" aria-label="LDT 数据编码" title="所有 LDT 使用此编码" bind:value={spfDatabaseEncoding}>{#each encodingOptions as option}<option value={option.value}>{option.label}</option>{/each}</select>
+                <button class="button primary" disabled={busy} onclick={unpackSpfToSqlite}><Database size={17} />解包并生成数据库</button>
+              </div>
+            {/if}
 
             <div class="table-panel">
               <div class="table-toolbar">
@@ -639,7 +667,7 @@
         </div>
       {:else}
         <div class="settings-layout">
-          <div class="settings-card"><Wrench size={24} /><h3>LaTale Tools</h3><p>SPF、LDT 和 STG 资源工具。</p><div class="about-list"><span>版本<strong>0.0.1</strong></span><span>支持格式<strong>SPF / LDT / STG</strong></span><span>文件处理<strong>仅限本机</strong></span></div></div>
+          <div class="settings-card"><Wrench size={24} /><h3>LaTale Tools</h3><p>SPF、LDT 和 STG 资源工具。</p><div class="about-list"><span>版本<strong>0.0.2</strong></span><span>支持格式<strong>SPF / LDT / STG</strong></span><span>文件处理<strong>仅限本机</strong></span></div></div>
           <div class="settings-card"><Settings size={24} /><h3>默认行为</h3><label class="setting-row"><span>SPF 打包默认不加密</span><BadgeCheck size={18} /></label><label class="setting-row"><span>解包与 LDT 转换保存到输入文件同目录</span><BadgeCheck size={18} /></label><label class="setting-row"><span>拖入文件后自动选择工具</span><BadgeCheck size={18} /></label></div>
         </div>
       {/if}

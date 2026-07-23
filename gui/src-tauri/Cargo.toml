@@ -1,9 +1,15 @@
 [package]
 name = "latale-tools-gui"
-version = "0.0.1"
+version = "0.0.2"
 description = "Desktop interface for LaTale resource tools"
 authors = ["LaTale Tools Contributors"]
 edition = "2021"
+autobins = false
+default-run = "latale-tools"
+
+[[bin]]
+name = "latale-tools"
+path = "src/main.rs"
 
 [lib]
 name = "latale_tools_gui_lib"
@@ -16,6 +22,7 @@ tauri-build = { version = "2", features = [] }
 latale-tools = { path = "../.." }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"

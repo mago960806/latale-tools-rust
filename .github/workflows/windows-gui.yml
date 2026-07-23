@@ -39,12 +39,32 @@ jobs:
         working-directory: gui
         run: npm run tauri build
 
+      - name: Stage release files
+        shell: pwsh
+        run: |
+          $version = (Get-Content gui/package.json | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Force release-artifacts | Out-Null
+
+          Copy-Item `
+            gui/src-tauri/target/release/latale-tools.exe `
+            "release-artifacts/latale-tools-$version-windows-x64.exe"
+
+          $nsis = Get-ChildItem gui/src-tauri/target/release/bundle/nsis/*.exe |
+            Select-Object -First 1
+          $msi = Get-ChildItem gui/src-tauri/target/release/bundle/msi/*.msi |
+            Select-Object -First 1
+          if (-not $nsis -or -not $msi) {
+            throw "NSIS or MSI installer was not generated"
+          }
+
+          Copy-Item $nsis.FullName `
+            "release-artifacts/latale-tools-$version-windows-x64-setup.exe"
+          Copy-Item $msi.FullName `
+            "release-artifacts/latale-tools-$version-windows-x64.msi"
+
       - name: Upload Windows installers
         uses: actions/upload-artifact@v4
         with:
           name: latale-tools-windows-x64
           if-no-files-found: error
-          path: |
-            gui/src-tauri/target/release/latale-tools-gui.exe
-            gui/src-tauri/target/release/bundle/nsis/*.exe
-            gui/src-tauri/target/release/bundle/msi/*.msi
+          path: release-artifacts/*

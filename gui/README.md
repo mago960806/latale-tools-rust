@@ -4,7 +4,7 @@
 
 ## 功能
 
-- SPF：查看包信息和文件列表、识别加密状态、验证、解包。
+- SPF：查看包信息和文件列表、识别加密状态、验证、解包；ROWID 包可解包并生成 `latale.db`。
 - LDT：查看全部表格数据，执行 LDT 和 CSV 双向转换。
 - STG：查看 Stage/Group/Map 数量，执行 STG 和 JSON 双向转换。
 - SPF 打包：从注册表选择资源类型，支持明文或加密打包。
@@ -67,11 +67,13 @@ npm run tauri build
 推送 `v*` 格式的标签也会自动构建。例如：
 
 ```bash
-git tag v0.0.1
-git push origin v0.0.1
+git tag v0.0.2
+git push origin v0.0.2
 ```
 
-下载的构建产物包括独立 EXE、NSIS 安装程序和 MSI 安装包。
+下载的构建产物包括独立 EXE、NSIS 安装程序和 MSI 安装包，文件名统一使用
+`latale-tools-<版本>-windows-x64.*`。安装后的主程序文件名为
+`latale-tools.exe`；应用和安装界面仍显示为 “LaTale Tools”。
 
 ## 目录
 
